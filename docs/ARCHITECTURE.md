@@ -122,6 +122,15 @@ Four rules were tightened after seeing what they did to the real itinerary:
 Before: 166 findings, 19 errors, most of them wrong. After: 111 findings, 5 errors, all of
 them real.
 
+### Every screen must be reachable
+
+Three screens shipped routed, rendering and linked from nowhere: reminders, the playbook
+once inside a trip, and the today jump. A screen with no way in is the same as a screen
+that does not exist, and nothing in the type system or the test suite noticed.
+
+`src/features/__tests__/screens.test.tsx` now asserts those links render. Add a case there
+when adding a route.
+
 ## Known limits
 
 - Live transit times and an in-app assistant are not implemented. The interfaces for them
@@ -131,3 +140,5 @@ them real.
 - There is no editing of items beyond status and order. Adding a full editor is the obvious
   next feature.
 - The guide set covers the five countries of the sample trip.
+
+`docs/PENDING.md` holds the live list, in priority order.
