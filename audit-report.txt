@@ -1,0 +1,22 @@
+TOTAL 166 {"error":19,"warning":98,"info":49}
+BYRULE idle-gap=34 insufficient-transfer=30 unresolved-tag=29 missing-transit-leg=14 chain-station-mismatch=12 mode-place-kind=9 manual=8 seasonal-service=7 duplicate-venue=6 time-overlap=3 stale-arrival-time=2 transit-duration-mismatch=2 early-departure-no-reminder=2 round-trip-asymmetry=2 accommodation-gap=1 item-booking-date-mismatch=1 venue-closed-weekday=1 trip-range=1 opening-hours-suspicious=1 airport-lead-time=1
+ERR [-] accommodation-gap: No accommodation on the night of 2026-09-25
+ERR [2026-09-26] item-booking-date-mismatch: Arrive Rome Fiumicino is on the wrong day
+ERR [2026-10-02] insufficient-transfer: 27 min to make High-speed train to Milan
+ERR [2026-10-02] unresolved-tag: Wake, breakfast and check out contradicts something else
+ERR [2026-10-04] insufficient-transfer: 40 min to make Trenitalia to Chiasso
+ERR [2026-10-04] unresolved-tag: Legacy routing: EuroCity to Arth-Goldau, then a Swiss train contradicts something else
+ERR [2026-10-09] time-overlap: Train to Spiez overlaps Train to Kandersteg
+ERR [2026-10-09] unresolved-tag: Train to Kandersteg contradicts something else
+ERR [2026-10-11] insufficient-transfer: 33 min to make TGV Lyria to Paris
+ERR [2026-10-11] time-overlap: TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon
+ERR [2026-10-11] unresolved-tag: Arrive Paris Gare de Lyon contradicts something else
+ERR [2026-10-11] unresolved-tag: Check in and rest contradicts something else
+ERR [2026-10-14] insufficient-transfer: 26 min to make Eurostar to Brussels Midi
+ERR [2026-10-14] unresolved-tag: Eurostar to Brussels Midi contradicts something else
+ERR [2026-10-15] insufficient-transfer: 21 min to make Eurostar to Amsterdam Centraal
+ERR [2026-10-15] time-overlap: Eurostar to Amsterdam Centraal overlaps Arrive Amsterdam Centraal
+ERR [2026-10-15] unresolved-tag: Arrive Amsterdam Centraal contradicts something else
+ERR [2026-10-16] unresolved-tag: Stroopwafel at the market contradicts something else
+ERR [2026-10-16] venue-closed-weekday: Stroopwafel at the market is closed on Friday
+BOOK now      by 2026-09-06 : Galleria Borghese [guide]

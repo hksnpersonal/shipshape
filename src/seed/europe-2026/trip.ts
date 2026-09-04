@@ -18,7 +18,9 @@ export const trip: Trip = {
   name: 'Europe 2026',
   travellers: 2,
   startDate: DAY_DATES.d00,
-  endDate: DAY_DATES.d22,
+  // The notes header said 25 September to 18 October, but the flight home is the 17th.
+  // Kept as written so the linter raises it rather than the data quietly deciding.
+  endDate: '2026-10-18',
   originName: 'Sydney, Australia',
   originTimeZone: 'Australia/Sydney',
   defaultTimeZone: 'Europe/Rome',

@@ -208,7 +208,7 @@ const unresolvedTag: Rule = {
         out.push(
           makeFinding({
             ruleId: 'unresolved-tag',
-            severity: conflict ? 'error' : 'warning',
+            severity: conflict ? 'warning' : 'info',
             title: conflict
               ? `${item.title} contradicts something else`
               : `${item.title} still needs checking`,
@@ -238,7 +238,17 @@ const accommodationGap: Rule = {
   run(ctx) {
     const { uncovered, doubleBooked } = nightsCovered(ctx.bundle);
     const out: Finding[] = [];
+
+    // A night spent on an overnight flight or train is not a missing hotel booking.
+    const inTransit = new Set<string>();
+    for (const b of ctx.bundle.bookings) {
+      const lands = b.arriveDate;
+      if (!lands || lands <= b.date) continue;
+      for (let d = b.date; d < lands; d = addDays(d, 1)) inTransit.add(d);
+    }
+
     for (const night of uncovered) {
+      if (inTransit.has(night)) continue;
       out.push(
         makeFinding({
           ruleId: 'accommodation-gap',

@@ -100,9 +100,12 @@ describe('spec section 8 conflicts', () => {
     expect(finding.detail).toContain('15:40');
   });
 
-  it('#3b flags too little time between arriving and the next timed stop', () => {
+  it('#3b tells a real connection apart from a deliberate buffer', () => {
     const day = makeDay({ date: '2026-10-11', city: 'Paris', countryCode: 'FR' });
-    const findings = lint(
+    const station = p('Gare de Lyon', { kind: 'rail-station' });
+
+    // Walking to the station 20 minutes before a train is good planning, not a risk.
+    const buffer = lint(
       makeBundle({
         days: [day],
         items: [
@@ -110,22 +113,49 @@ describe('spec section 8 conflicts', () => {
             dayId: day.id,
             sortKey: 1000,
             type: 'transfer',
-            title: 'Metro to the hotel',
-            time: '15:40',
-            timeEnd: '16:04',
-            travel: { mode: 'metro', from: gareDeLyon, to: gareDuNord, durationMins: 24 },
+            title: 'Walk to the station',
+            time: '11:40',
+            timeEnd: '11:55',
+            travel: { mode: 'walk', from: gareDuNord, to: station, durationMins: 15 },
           }),
-          makeItem({
+          transport({
             dayId: day.id,
             sortKey: 2000,
-            type: 'admin',
-            title: 'Check in and freshen up',
-            time: '16:09',
+            title: 'Train onward',
+            time: '12:00',
+            timeEnd: '13:00',
+            travel: { mode: 'train', from: station, to: gareDeLyon, durationMins: 60 },
           }),
         ],
       }),
     );
-    expect(expectRule(findings, 'insufficient-transfer').severity).toBe('warning');
+    expect(fired(buffer, 'insufficient-transfer')).toHaveLength(0);
+
+    // Arriving on one service and having minutes to catch another is a risk.
+    const connection = lint(
+      makeBundle({
+        days: [day],
+        items: [
+          transport({
+            dayId: day.id,
+            sortKey: 1000,
+            title: 'Metro across the city',
+            time: '11:40',
+            timeEnd: '11:55',
+            travel: { mode: 'metro', from: gareDuNord, to: station, durationMins: 15 },
+          }),
+          transport({
+            dayId: day.id,
+            sortKey: 2000,
+            title: 'Train onward',
+            time: '12:00',
+            timeEnd: '13:00',
+            travel: { mode: 'train', from: station, to: gareDeLyon, durationMins: 60 },
+          }),
+        ],
+      }),
+    );
+    expect(expectRule(connection, 'insufficient-transfer').severity).toBe('warning');
   });
 
   it('#4 raises the bar for a connection onto a non-refundable ticket', () => {
@@ -440,7 +470,7 @@ describe('spec section 8 conflicts', () => {
     expect(fired(findings, 'missing-transit-leg')).toHaveLength(1);
   });
 
-  it('#8b flags a leg called a metro that runs between railway stations', () => {
+  it('#8b flags a leg called a metro that leaves the city', () => {
     const day = makeDay({ date: '2026-10-16', city: 'Amsterdam', countryCode: 'NL' });
     const findings = lint(
       makeBundle({
@@ -460,7 +490,7 @@ describe('spec section 8 conflicts', () => {
         ],
       }),
     );
-    expect(expectRule(findings, 'mode-place-kind').detail).toContain('railway station');
+    expect(expectRule(findings, 'mode-place-kind').detail).toContain('mainline train');
   });
 
   it('#9 flags a Monday-only stall visited on a Friday', () => {

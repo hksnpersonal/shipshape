@@ -7,6 +7,7 @@
  * October.
  */
 import { placeKey, sameCity, sameLocality, samePlace } from '@/domain/places';
+import { matchGuides } from '@/playbook/match';
 import { isOpenOn, parseOpeningHours } from '@/domain/hours';
 import { weekdayOf } from '@/domain/time';
 import type { Finding, Item, Place, TravelMode } from '@/domain/types';
@@ -59,6 +60,8 @@ const chainStationMismatch: Rule = {
         const from = next.item.travel?.from;
         const to = prev.item.travel?.to;
         if (!from || !to || samePlace(to, from)) continue;
+        // Two stations in the same part of town are a walk, not a hole in the plan.
+        if (sameLocality(to, from) !== 'different') continue;
         // A short hop between the two is a legitimate way to bridge them.
         const between = timeline.entries.slice(
           timeline.entries.indexOf(prev) + 1,
@@ -167,14 +170,15 @@ const missingTransitLeg: Rule = {
   },
 };
 
-/** Modes that only ever serve a place of a given kind. */
+/** Water modes only serve piers, and flights only serve airports. */
 const MODE_EXPECTS: Partial<Record<TravelMode, { kinds: string[]; label: string }>> = {
-  metro: { kinds: ['metro-station', 'venue', 'area', 'hotel', 'bus-stop'], label: 'a metro stop' },
-  train: { kinds: ['rail-station', 'metro-station', 'airport'], label: 'a railway station' },
   ferry: { kinds: ['pier'], label: 'a ferry pier' },
   boat: { kinds: ['pier'], label: 'a pier' },
   flight: { kinds: ['airport'], label: 'an airport' },
 };
+
+/** Modes that are city networks and do not leave the city they belong to. */
+const CITY_MODES = new Set<TravelMode>(['metro', 'tram']);
 
 const modePlaceKind: Rule = {
   id: 'mode-place-kind',
@@ -189,21 +193,39 @@ const modePlaceKind: Rule = {
       for (const { item } of timeline.entries) {
         const travel = item.travel;
         if (!travel) continue;
+
+        // A city metro that leaves the city is a mainline train wearing the wrong name.
+        // This is exactly the Zaandijk case, and booking the wrong network at the machine
+        // is an easy and expensive mistake.
+        if (CITY_MODES.has(travel.mode) && !sameCity(travel.from, travel.to)) {
+          out.push(
+            makeFinding({
+              ruleId: 'mode-place-kind',
+              severity: 'warning',
+              title: `"${item.title}" is called a ${travel.mode} but leaves ${travel.from.city ?? 'the city'}`,
+              detail: `${travel.from.name} is in ${travel.from.city ?? 'one place'} and ${travel.to.name} is in ${travel.to.city ?? 'another'}. A ${travel.mode} does not run between them; this is almost certainly a mainline train from the main platforms.`,
+              suggestedFix: `Check which operator actually serves ${travel.to.name}, and buy the right ticket.`,
+              day,
+              items: [item],
+            }),
+          );
+          continue;
+        }
+
         const expectation = MODE_EXPECTS[travel.mode];
         if (!expectation) continue;
         const wrong = [travel.from, travel.to].filter(
           (p) => p.kind !== undefined && !expectation.kinds.includes(p.kind),
         );
-        if (wrong.length === 0) continue;
         const place = wrong[0];
         if (!place) continue;
         out.push(
           makeFinding({
             ruleId: 'mode-place-kind',
             severity: 'warning',
-            title: `"${item.title}" is called a ${travel.mode} but ${place.name} is not ${expectation.label}`,
-            detail: `${place.name} is ${place.kind === 'rail-station' ? 'a railway station' : `a ${place.kind}`}. Booking the wrong network is an easy mistake to make at the machine.`,
-            suggestedFix: `Check which service actually runs to ${place.name} and correct the mode.`,
+            title: `"${item.title}" travels by ${travel.mode} but ${place.name} is not ${expectation.label}`,
+            detail: `${place.name} is recorded as a ${place.kind}. Check where the service actually departs from.`,
+            suggestedFix: `Confirm the departure point for ${place.name}.`,
             day,
             items: [item],
           }),
@@ -350,11 +372,11 @@ const seasonalService: Rule = {
         const travel = item.travel;
         if (!travel) continue;
 
-        const guide = ctx.guides.find(
-          (g) =>
-            g.seasonal?.offSeasonMonths.includes(monthNumber) &&
-            (g.match.modes?.includes(travel.mode) ?? false),
-        );
+        // Match the way the playbook does, so a Lake Como ferry warning never lands on a
+        // Lake Lucerne boat just because both float.
+        const guide = matchGuides(item, ctx.guides)
+          .map((r) => r.guide)
+          .find((g) => g.seasonal?.offSeasonMonths.includes(monthNumber));
         const flagged = travel.seasonalTimetable === true;
         if (!flagged && !guide) continue;
         if (bookingOf(ctx, item.bookingId)?.status === 'booked') continue;

@@ -9,10 +9,32 @@ import { fromMinutes } from '@/domain/time';
 import { samePlace } from '@/domain/places';
 import type { Finding, Item } from '@/domain/types';
 import type { LintContext, Rule } from '../engine';
-import type { TimelineEntry } from '../timeline';
+import { durationOf, type TimelineEntry } from '../timeline';
 import { bookingOf, formatMins, isLocked, isTransport, makeFinding } from './helpers';
 
 const at = (mins: number | null): string => (mins === null ? 'an unknown time' : fromMinutes(mins));
+
+/** Modes that run to a timetable and can therefore run late. */
+const SCHEDULED_MODES = new Set([
+  'train',
+  'metro',
+  'tram',
+  'bus',
+  'ferry',
+  'boat',
+  'flight',
+  'cogwheel',
+  'cablecar',
+  'gondola',
+  'funicular',
+  'shuttle',
+]);
+
+/** True when this item is you stepping off something that runs to a timetable. */
+function arrivesOnAService(item: Item): boolean {
+  const mode = item.travel?.mode;
+  return mode !== undefined && SCHEDULED_MODES.has(mode);
+}
 
 /** Consecutive pairs of timed entries within each day. */
 function* timedPairs(ctx: LintContext): Generator<{
@@ -70,8 +92,11 @@ const insufficientTransfer: Rule = {
       if (prev.endMin === null || next.startMin === null) continue;
       const gap = next.startMin - prev.endMin;
       if (gap < 0) continue; // a real overlap is the other rule's business
-      // Only meaningful when one side is a journey: you have to get somewhere, or catch something.
-      if (!isTransport(prev.item) && !isTransport(next.item)) continue;
+      // A connection, not a buffer. Turning up early for a train is good planning; the
+      // risk is arriving on one scheduled service and having to catch another. Walking
+      // to a station beforehand cannot make you late in the same way.
+      if (!arrivesOnAService(prev.item)) continue;
+      if (next.item.type !== 'transport') continue;
 
       const nextBooking = bookingOf(ctx, next.item.bookingId);
       const locked = isLocked(nextBooking);
@@ -154,24 +179,39 @@ const idleGap: Rule = {
         const gap = next.startMin - prev.endMin;
         if (gap <= ctx.options.idleGapMins) continue;
 
-        // Something untimed sitting between them in the running order fills the gap.
+        // Untimed items sitting in the gap do not silence the rule. They change what it
+        // says: the plan has something here, it just never got a clock time.
         const from = order.indexOf(prev.item.id);
         const to = order.indexOf(next.item.id);
         const between = timeline.entries
           .slice(Math.min(from, to) + 1, Math.max(from, to))
           .filter((e) => e.startMin === null);
-        if (between.length > 0) continue;
+        const accounted = between.reduce((total, e) => total + (durationOf(e.item) ?? 0), 0);
+        if (gap - accounted <= ctx.options.idleGapMins) continue;
+        // Two cases are worth raising: something is planned here but never got a time,
+        // or you have just arrived somewhere and the plan goes quiet. A long lull
+        // between two sights on a holiday is not a defect.
+        if (between.length === 0 && !isTransport(prev.item)) continue;
 
+        const names = between.map((e) => `"${e.item.title}"`).join(', ');
         out.push(
           makeFinding({
             ruleId: 'idle-gap',
             severity: 'info',
-            title: `${formatMins(gap)} unplanned after ${prev.item.title}`,
-            detail: `Nothing is scheduled between ${at(prev.endMin)} and ${at(next.startMin)}.`,
+            title:
+              between.length > 0
+                ? `${names} sits in a ${formatMins(gap)} gap with no time on it`
+                : `${formatMins(gap)} unplanned after ${prev.item.title}`,
+            detail:
+              between.length > 0
+                ? `Between ${at(prev.endMin)} and ${at(next.startMin)} the only thing planned is ${names}, which has no start time or duration.`
+                : `Nothing is scheduled between ${at(prev.endMin)} and ${at(next.startMin)}.`,
             suggestedFix:
-              'Either this is deliberate slack, or an activity was meant to sit here and never got a time.',
+              between.length > 0
+                ? 'Give it a time, or accept that the morning is loose and stop the app asking.'
+                : 'Either this is deliberate slack, or an activity was meant to sit here and never got a time.',
             day,
-            items: [prev.item, next.item],
+            items: [prev.item, next.item, ...between.map((e) => e.item)],
           }),
         );
       }
@@ -320,13 +360,17 @@ const itemBookingDateMismatch: Rule = {
       const booking = bookingOf(ctx, item.bookingId);
       if (!booking) continue;
       const day = ctx.bundle.days.find((d) => d.id === item.dayId);
-      if (!day || day.date === booking.date) continue;
+      if (!day) continue;
+      // An overnight flight legitimately touches two days: the day it leaves and the day
+      // it lands. Both are the right date for an item about it.
+      const validDates = [booking.date, booking.arriveDate, booking.endDate].filter(Boolean);
+      if (validDates.includes(day.date)) continue;
       out.push(
         makeFinding({
           ruleId: 'item-booking-date-mismatch',
           severity: 'error',
           title: `${item.title} is on the wrong day`,
-          detail: `It sits on ${day.date} but ${booking.title} is booked for ${booking.date}.`,
+          detail: `It sits on ${day.date} but ${booking.title} is booked for ${validDates.join(' or ')}.`,
           suggestedFix: `Move it back to ${booking.date}, or change the booking.`,
           day,
           items: [item],
