@@ -15,9 +15,7 @@ import { bookingOf, formatMins, isLocked, isTransport, makeFinding } from './hel
 const at = (mins: number | null): string => (mins === null ? 'an unknown time' : fromMinutes(mins));
 
 /** Consecutive pairs of timed entries within each day. */
-function* timedPairs(
-  ctx: LintContext,
-): Generator<{
+function* timedPairs(ctx: LintContext): Generator<{
   day: LintContext['orderedDays'][number];
   prev: TimelineEntry;
   next: TimelineEntry;

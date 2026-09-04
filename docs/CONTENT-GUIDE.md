@@ -17,11 +17,11 @@ Accents come back in a later localisation pass.
 
 ## The contract you build against
 
-| File | What it gives you |
-|---|---|
-| `src/domain/types.ts` | every type. Do not widen or invent fields. |
-| `src/seed/europe-2026/ids.ts` | `DAY_DATES`, `dayId()`, `itemId()`, `sortKeyFor()`, `ACC`, `BK`, `PLACES` |
-| `src/seed/europe-2026/trip.ts` | the `Trip` row and its swap groups |
+| File                           | What it gives you                                                         |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| `src/domain/types.ts`          | every type. Do not widen or invent fields.                                |
+| `src/seed/europe-2026/ids.ts`  | `DAY_DATES`, `dayId()`, `itemId()`, `sortKeyFor()`, `ACC`, `BK`, `PLACES` |
+| `src/seed/europe-2026/trip.ts` | the `Trip` row and its swap groups                                        |
 
 Never invent an id. If you need a booking or a place that is not in `ids.ts`, say so in
 your report rather than adding one, unless the rule below allows an inline place.
@@ -47,15 +47,15 @@ proper noun. `"**14:30** - Check in, freshen up, rest 30 mins"` becomes `Check i
 
 ## Times
 
-| In the notes | In the data |
-|---|---|
-| `08:35` | `time: '08:35'` |
-| `19:00-20:00` | `time: '19:00'`, `timeEnd: '20:00'` |
-| `~15:45` | `time: '15:45'`, `timeApprox: true` |
-| `Morning` / `Afternoon` / `Evening` | `time: null`, `timeLabel: 'morning'` |
-| `15:00 or 15:30` | `time: '15:00'`, and put the alternative in `notes` |
-| `(3 hours)` after a start time | `durationMins: 180` |
-| no time at all | omit `time`; the item still holds its `sortKey` position |
+| In the notes                        | In the data                                              |
+| ----------------------------------- | -------------------------------------------------------- |
+| `08:35`                             | `time: '08:35'`                                          |
+| `19:00-20:00`                       | `time: '19:00'`, `timeEnd: '20:00'`                      |
+| `~15:45`                            | `time: '15:45'`, `timeApprox: true`                      |
+| `Morning` / `Afternoon` / `Evening` | `time: null`, `timeLabel: 'morning'`                     |
+| `15:00 or 15:30`                    | `time: '15:00'`, and put the alternative in `notes`      |
+| `(3 hours)` after a start time      | `durationMins: 180`                                      |
+| no time at all                      | omit `time`; the item still holds its `sortKey` position |
 
 Times are wall-clock in the day's timezone. Never convert to UTC.
 
@@ -73,15 +73,15 @@ of `booked`, `to_book` and `on_site`. The item links to the booking with `bookin
 
 ## Types
 
-| Use | When |
-|---|---|
-| `transport` | a named service between two places: a train, flight, ferry, gondola, cogwheel, boat |
-| `transfer` | getting yourself between two places: walking, a metro hop, a taxi, a bus to the station |
-| `sight` | a place you look at or go into |
-| `meal` | a restaurant, cafe, gelato, bakery |
-| `shop` | buying things, including supermarket runs |
-| `admin` | check-in, checkout, luggage drop, immigration, waking up |
-| `reminder` | a standalone instruction with no place, e.g. "wear appropriate outfits" |
+| Use         | When                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------- |
+| `transport` | a named service between two places: a train, flight, ferry, gondola, cogwheel, boat     |
+| `transfer`  | getting yourself between two places: walking, a metro hop, a taxi, a bus to the station |
+| `sight`     | a place you look at or go into                                                          |
+| `meal`      | a restaurant, cafe, gelato, bakery                                                      |
+| `shop`      | buying things, including supermarket runs                                               |
+| `admin`     | check-in, checkout, luggage drop, immigration, waking up                                |
+| `reminder`  | a standalone instruction with no place, e.g. "wear appropriate outfits"                 |
 
 ## Travel legs
 

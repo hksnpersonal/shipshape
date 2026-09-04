@@ -52,7 +52,6 @@ const brusselsMidi = p('Brussels Midi', {
   city: 'Brussels',
   countryCode: 'BE',
 });
-const grandPlace = p('Grand Place', { city: 'Brussels', zone: 'brussels-centre' });
 const amsterdamCentraal = p('Amsterdam Centraal', {
   kind: 'rail-station',
   city: 'Amsterdam',

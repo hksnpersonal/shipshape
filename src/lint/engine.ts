@@ -69,7 +69,8 @@ export interface LintInput extends Partial<LintOptions> {
 }
 
 export function buildContext(bundle: TripBundle, input: LintInput = {}): LintContext {
-  const { guides = [], rules: _rules, ...optionOverrides } = input;
+  const { guides = [], rules, ...optionOverrides } = input;
+  void rules; // the rule set is chosen by lintTrip, not by the context
   const options: LintOptions = { ...DEFAULT_LINT_OPTIONS, ...optionOverrides };
   return {
     bundle,
