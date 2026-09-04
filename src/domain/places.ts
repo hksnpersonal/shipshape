@@ -88,6 +88,12 @@ export function sameLocality(a: Place | null | undefined, b: Place | null | unde
   return 'unknown';
 }
 
+/** Same town, whatever the data says about walkability within it. */
+export function sameCity(a: Place | null | undefined, b: Place | null | undefined): boolean {
+  if (!a?.city || !b?.city) return false;
+  return a.city.toLowerCase() === b.city.toLowerCase();
+}
+
 /** The text a map link should search for. */
 export function placeQuery(place: Place): string {
   if (place.mapsQuery) return place.mapsQuery;
