@@ -24,6 +24,7 @@ import type {
   TripBundle,
 } from '@/domain/types';
 import { TRIP_SCOPED_TABLES, db } from './db';
+import { bytesOf } from './transfer';
 
 const now = (): string => new Date().toISOString();
 
@@ -67,11 +68,13 @@ export const tripsRepo = {
   /** Removes the trip and every row that belongs to it, all or nothing. */
   async remove(tripId: ID): Promise<void> {
     await db.transaction('rw', db.tables, async () => {
+      // Collect the document ids first. Deleting the metadata rows before reading them
+      // would leave the files behind with nothing pointing at them.
+      const docIds = (await db.documents.where('tripId').equals(tripId).primaryKeys()) as ID[];
       for (const name of TRIP_SCOPED_TABLES) {
         await db.table(name).where('tripId').equals(tripId).delete();
       }
-      const docs = await db.documents.where('tripId').equals(tripId).primaryKeys();
-      await db.documentBlobs.bulkDelete(docs as ID[]);
+      await db.documentBytes.bulkDelete(docIds);
       await db.trips.delete(tripId);
     });
   },
@@ -248,6 +251,7 @@ export const documentsRepo = {
         `That file is ${Math.round(file.size / 1024 / 1024)} MB. The limit is 15 MB, so the app keeps working offline.`,
       );
     }
+    const bytes = await bytesOf(file);
     const meta: DocumentMeta = {
       id: newId('doc'),
       tripId,
@@ -259,21 +263,31 @@ export const documentsRepo = {
       createdAt: now(),
       ...(options.notes ? { notes: options.notes } : {}),
     };
-    await db.transaction('rw', db.documents, db.documentBlobs, async () => {
+    await db.transaction('rw', db.documents, db.documentBytes, async () => {
       await db.documents.add(meta);
-      await db.documentBlobs.add({ id: meta.id, blob: file });
+      await db.documentBytes.add({ id: meta.id, bytes });
     });
     return meta.id;
   },
 
+  async bytes(documentId: ID): Promise<ArrayBuffer | undefined> {
+    return (await db.documentBytes.get(documentId))?.bytes;
+  },
+
+  /** The file as something a browser can open, rebuilt from the stored bytes. */
   async blob(documentId: ID): Promise<Blob | undefined> {
-    return (await db.documentBlobs.get(documentId))?.blob;
+    const [meta, row] = await Promise.all([
+      db.documents.get(documentId),
+      db.documentBytes.get(documentId),
+    ]);
+    if (!row) return undefined;
+    return new Blob([row.bytes], { type: meta?.mimeType ?? 'application/octet-stream' });
   },
 
   async remove(documentId: ID): Promise<void> {
-    await db.transaction('rw', db.documents, db.documentBlobs, async () => {
+    await db.transaction('rw', db.documents, db.documentBytes, async () => {
       await db.documents.delete(documentId);
-      await db.documentBlobs.delete(documentId);
+      await db.documentBytes.delete(documentId);
     });
   },
 };

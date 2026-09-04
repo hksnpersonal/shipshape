@@ -23,8 +23,21 @@ export const APP_VERSION = '0.1.0';
 // Blob encoding
 // ---------------------------------------------------------------------------
 
-export async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
+/**
+ * A Blob that has been through structured clone into storage does not always come back
+ * with an `arrayBuffer` method, so fall back to the reader that predates it.
+ */
+async function bytesOf(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === 'function') return blob.arrayBuffer();
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the stored file.'));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+export function bytesToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
   const CHUNK = 0x8000; // large enough to be fast, small enough not to blow the stack
@@ -34,11 +47,17 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-export function base64ToBlob(data: string, mimeType: string): Blob {
+export async function blobToBase64(blob: Blob): Promise<string> {
+  return bytesToBase64(await bytesOf(blob));
+}
+
+export { bytesOf };
+
+export function base64ToBytes(data: string): ArrayBuffer {
   const binary = atob(data);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: mimeType });
+  return bytes.buffer;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,8 +84,8 @@ export async function exportTrip(
       documents.push({ ...meta });
       continue;
     }
-    const row = await db.documentBlobs.get(meta.id);
-    documents.push(row ? { ...meta, data: await blobToBase64(row.blob) } : { ...meta });
+    const row = await db.documentBytes.get(meta.id);
+    documents.push(row ? { ...meta, data: bytesToBase64(row.bytes) } : { ...meta });
   }
 
   return {
@@ -269,8 +288,7 @@ export async function importTrip(
     for (const doc of file.documents) {
       const { data, ...meta } = doc;
       await db.documents.put(meta);
-      if (data)
-        await db.documentBlobs.put({ id: meta.id, blob: base64ToBlob(data, meta.mimeType) });
+      if (data) await db.documentBytes.put({ id: meta.id, bytes: base64ToBytes(data) });
       else warnings.push(`"${meta.name}" came without its file and is listed but empty.`);
     }
   });

@@ -11,7 +11,7 @@ import type {
   Accommodation,
   Booking,
   Day,
-  DocumentBlob,
+  DocumentBytes,
   DocumentMeta,
   FindingState,
   ID,
@@ -30,7 +30,7 @@ export class TripDeckDB extends Dexie {
   accommodations!: Table<Accommodation, ID>;
   documents!: Table<DocumentMeta, ID>;
   /** Kept apart from `documents` so listing never pulls binary data into memory. */
-  documentBlobs!: Table<DocumentBlob, ID>;
+  documentBytes!: Table<DocumentBytes, ID>;
   reminders!: Table<Reminder, ID>;
   conflicts!: Table<ManualConflict, ID>;
   findingStates!: Table<FindingState, string>;
@@ -47,7 +47,7 @@ export class TripDeckDB extends Dexie {
       bookings: 'id, tripId, [tripId+date], [tripId+status], kind',
       accommodations: 'id, tripId, [tripId+checkIn]',
       documents: 'id, tripId, [attachedTo.kind+attachedTo.id]',
-      documentBlobs: 'id',
+      documentBytes: 'id',
       reminders: 'id, tripId, [tripId+fireDate]',
       conflicts: 'id, tripId',
       findingStates: 'id, tripId, [tripId+status], key',

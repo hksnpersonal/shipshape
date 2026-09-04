@@ -31,7 +31,7 @@
       "@/*": ["src/*"]
     },
 
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite/client", "vitest/globals", "vite-plugin-pwa/react", "@testing-library/jest-dom"]
   },
   "include": ["src"]
 }

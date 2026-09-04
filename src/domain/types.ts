@@ -263,10 +263,16 @@ export interface DocumentMeta {
   notes?: string;
 }
 
-/** Stored in its own table so list views never load binary data. */
-export interface DocumentBlob {
+/**
+ * File contents, kept in their own table so list views never load binary data.
+ *
+ * Stored as raw bytes rather than a Blob: an ArrayBuffer survives structured clone
+ * everywhere, while Blob-in-IndexedDB has a history of being unreliable on older mobile
+ * browsers. The mime type lives on the metadata row, so a Blob is rebuilt on demand.
+ */
+export interface DocumentBytes {
   id: ID;
-  blob: Blob;
+  bytes: ArrayBuffer;
 }
 
 export type ReminderKind = 'day-before' | 'same-day' | 'custom';
