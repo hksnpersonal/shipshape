@@ -13,6 +13,7 @@ import { europe2026 } from '@/seed/europe-2026';
 import { settingsRepo } from '@/db/repo';
 import { DayTimelinePage } from '@/features/DayPages';
 import { ConflictInboxPage } from '@/features/InboxPages';
+import { DaysIndexPage, TripHomePage } from '@/features/TripPages';
 
 const TRIP = europe2026.bundle.trip.id;
 
@@ -25,6 +26,8 @@ function renderAt(path: string) {
         children: [
           { path: 't/:tripId/days/:dayId', element: <DayTimelinePage /> },
           { path: 't/:tripId/conflicts', element: <ConflictInboxPage /> },
+          { path: 't/:tripId', element: <TripHomePage /> },
+          { path: 't/:tripId/days', element: <DaysIndexPage /> },
         ],
       },
     ],
@@ -119,5 +122,21 @@ describe('the conflict inbox', () => {
     expect(
       await screen.findByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
     ).toBeInTheDocument();
+  });
+});
+
+describe('nothing is a dead end', () => {
+  it('offers a way into the reminders and the playbook from the trip home', async () => {
+    // Both screens exist and are routed. Without a link they may as well not.
+    renderAt(`/t/${TRIP}`);
+    const reminders = await screen.findByText('Reminders');
+    expect(reminders.closest('a')).toHaveAttribute('href', `/t/${TRIP}/reminders`);
+    expect(screen.getByText('Booking playbook').closest('a')).toHaveAttribute('href', '/playbook');
+  });
+
+  it('offers a way to jump to today from the day list', async () => {
+    renderAt(`/t/${TRIP}/days`);
+    const jump = await screen.findByText('Jump to today');
+    expect(jump.closest('a')).toHaveAttribute('href', `/t/${TRIP}/today`);
   });
 });

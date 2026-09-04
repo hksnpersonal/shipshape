@@ -90,6 +90,7 @@ export function TripHomePage() {
     (e) => e.result.urgency === 'overdue' || e.result.urgency === 'now',
   );
   const soon = bookBy.filter((e) => e.result.urgency === 'soon').slice(0, 3);
+  const pendingReminders = bundle.reminders.filter((r) => r.status === 'pending').length;
 
   return (
     <>
@@ -205,6 +206,33 @@ export function TripHomePage() {
           </div>
         </Section>
       ) : null}
+
+      <Section title="Also here">
+        <div className="space-y-2">
+          <LinkCard to={`/t/${trip.id}/reminders`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">Reminders</p>
+                <p className="text-sm text-slate-500">
+                  {pendingReminders} waiting, mostly things to buy the evening before
+                </p>
+              </div>
+              <ArrowRight size={18} className="text-slate-400" aria-hidden />
+            </div>
+          </LinkCard>
+          <LinkCard to="/playbook">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">Booking playbook</p>
+                <p className="text-sm text-slate-500">
+                  Where to buy each kind of ticket, and what catches people out
+                </p>
+              </div>
+              <ArrowRight size={18} className="text-slate-400" aria-hidden />
+            </div>
+          </LinkCard>
+        </div>
+      </Section>
     </>
   );
 }
@@ -220,7 +248,18 @@ export function DaysIndexPage() {
 
   return (
     <>
-      <PageHeader title="Every day" subtitle={`${days.length} days`} />
+      <PageHeader
+        title="Every day"
+        subtitle={`${days.length} days`}
+        actions={
+          <Link
+            to={`/t/${bundle.trip.id}/today`}
+            className="inline-flex min-h-[40px] items-center rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600"
+          >
+            Jump to today
+          </Link>
+        }
+      />
       <div className="space-y-2">
         {days.map((day, index) => {
           const items = itemsForDay(bundle, day.id);
