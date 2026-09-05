@@ -4,14 +4,16 @@
  */
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { AppShell } from '@/app/AppShell';
 import { db } from '@/db/db';
 import { importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
-import { settingsRepo } from '@/db/repo';
+import { documentsRepo, settingsRepo } from '@/db/repo';
+import { BookingDetailPage } from '@/features/BookingPages';
 import { DayTimelinePage } from '@/features/DayPages';
+import { DocumentsVaultPage, OBJECT_URL_TTL_MS } from '@/features/DocumentPages';
 import { ConflictInboxPage } from '@/features/InboxPages';
 import { DaysIndexPage, TripHomePage } from '@/features/TripPages';
 
@@ -28,6 +30,8 @@ function renderAt(path: string) {
           { path: 't/:tripId/conflicts', element: <ConflictInboxPage /> },
           { path: 't/:tripId', element: <TripHomePage /> },
           { path: 't/:tripId/days', element: <DaysIndexPage /> },
+          { path: 't/:tripId/documents', element: <DocumentsVaultPage /> },
+          { path: 't/:tripId/bookings/:bookingId', element: <BookingDetailPage /> },
         ],
       },
     ],
@@ -138,5 +142,101 @@ describe('nothing is a dead end', () => {
     renderAt(`/t/${TRIP}/days`);
     const jump = await screen.findByText('Jump to today');
     expect(jump.closest('a')).toHaveAttribute('href', `/t/${TRIP}/today`);
+  });
+
+  it('offers a way into the documents vault from the trip home', async () => {
+    renderAt(`/t/${TRIP}`);
+    const vault = await screen.findByText('Documents');
+    expect(vault.closest('a')).toHaveAttribute('href', `/t/${TRIP}/documents`);
+  });
+});
+
+describe('the documents vault', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    URL.createObjectURL = vi.fn(() => 'blob:mock');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  it('lists a document once it has been attached', async () => {
+    renderAt(`/t/${TRIP}/documents`);
+    await screen.findByText('Nothing filed yet');
+
+    const user = userEvent.setup();
+    const file = new File(['ticket bytes'], 'boat-ticket.pdf', { type: 'application/pdf' });
+    await user.upload(screen.getByLabelText('Add a document'), file);
+
+    expect(await screen.findByText('boat-ticket.pdf')).toBeInTheDocument();
+    expect(screen.queryByText('Nothing filed yet')).not.toBeInTheDocument();
+  });
+
+  it('opens a document, and keeps the object URL alive long enough for the tab to load it', async () => {
+    const docId = await documentsRepo.attach(TRIP, new Blob(['x'], { type: 'text/plain' }), {
+      name: 'insurance.txt',
+    });
+    const blobSpy = vi.spyOn(documentsRepo, 'blob');
+    const scheduled = vi.spyOn(window, 'setTimeout');
+
+    renderAt(`/t/${TRIP}/documents`);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Open/ }));
+
+    await waitFor(() => expect(blobSpy).toHaveBeenCalledWith(docId));
+    expect(window.open).toHaveBeenCalledWith('blob:mock', '_blank', 'noopener');
+
+    // The new tab is still fetching the URL. Revoking synchronously blanks it - reliably so
+    // on iOS Safari - so nothing may be freed until the tab has had time to load.
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    const cleanup = scheduled.mock.calls.find((call) => call[1] === OBJECT_URL_TTL_MS)?.[0];
+    expect(cleanup).toBeTypeOf('function');
+    (cleanup as () => void)();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock');
+  });
+
+  it('removing a document deletes both its metadata and its bytes', async () => {
+    const docId = await documentsRepo.attach(TRIP, new Blob(['y']), { name: 'rail-pass.pdf' });
+
+    renderAt(`/t/${TRIP}/documents`);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Remove/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('rail-pass.pdf')).not.toBeInTheDocument();
+    });
+    expect(await db.documents.get(docId)).toBeUndefined();
+    expect(await db.documentBytes.get(docId)).toBeUndefined();
+  });
+
+  it('surfaces the repo message when a file is over the size limit', async () => {
+    renderAt(`/t/${TRIP}/documents`);
+    const user = userEvent.setup();
+    const huge = new File([new Uint8Array(16 * 1024 * 1024)], 'huge.bin');
+    await user.upload(await screen.findByLabelText('Add a document'), huge);
+
+    expect(await screen.findByText(/15 MB/)).toBeInTheDocument();
+    expect(screen.getByText('Nothing filed yet')).toBeInTheDocument();
+  });
+});
+
+describe('filing a document from a booking', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('associates the attachment with the booking, and the vault shows that association', async () => {
+    const bookingScreen = renderAt(`/t/${TRIP}/bookings/bk-rail-bsl-par`);
+    await screen.findByText('TGV Lyria, Basel to Paris');
+
+    const user = userEvent.setup();
+    const file = new File(['x'], 'tgv-ticket.pdf', { type: 'application/pdf' });
+    await user.upload(screen.getByLabelText('Attach a ticket or confirmation'), file);
+    expect(await screen.findByText('tgv-ticket.pdf')).toBeInTheDocument();
+    bookingScreen.unmount();
+
+    renderAt(`/t/${TRIP}/documents`);
+    expect(await screen.findByText('tgv-ticket.pdf')).toBeInTheDocument();
+    expect(screen.getByText(/Filed against TGV Lyria, Basel to Paris/)).toBeInTheDocument();
   });
 });

@@ -19,11 +19,13 @@ Item 1 below is Phase 0 there.
 
 ## Next, in order
 
-1. **Documents vault.** The last unaddressed part of the original brief: attaching the
-   tickets already bought. Storage, size limit, export and tests are done; only the screen
-   is missing. See the handoff for the specific steps.
-2. **Item editor.** Title, time, notes, tags and type. Today only status and order can
+1. **Item editor.** Title, time, notes, tags and type. Today only status and order can
    change, so a correction means editing the seed file. `itemsRepo.patch` already exists.
+   This is also the first piece of the roadmap's Phase 2 review surface - "easy to change
+   what the plan says" is mechanically this editor plus the linter re-running on each edit.
+2. **Say what kind a document is.** `attach` accepts a `kind` and the vault renders it, but
+   nothing sets one, so every filed document reads "Other". A picker on attach, or a guess
+   from the file name.
 3. **Quick capture for bookings.** A short form to add a booking from a confirmation email,
    with the guide match shown as you type. `bookingsRepo.add` already exists.
 4. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in

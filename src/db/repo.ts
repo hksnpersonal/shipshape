@@ -236,6 +236,21 @@ export const bookingsRepo = {
 export const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
 export const documentsRepo = {
+  /** Every document filed against a trip, newest first. */
+  async forTrip(tripId: ID): Promise<DocumentMeta[]> {
+    const docs = await db.documents.where('tripId').equals(tripId).toArray();
+    return docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  /** Documents filed against one booking, item, accommodation or trip, newest first. */
+  async forOwner(kind: DocumentOwnerKind, id: ID): Promise<DocumentMeta[]> {
+    const docs = await db.documents
+      .where('[attachedTo.kind+attachedTo.id]')
+      .equals([kind, id])
+      .toArray();
+    return docs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
   async attach(
     tripId: ID,
     file: File | Blob,

@@ -220,6 +220,17 @@ export function TripHomePage() {
               <ArrowRight size={18} className="text-slate-400" aria-hidden />
             </div>
           </LinkCard>
+          <LinkCard to={`/t/${trip.id}/documents`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">Documents</p>
+                <p className="text-sm text-slate-500">
+                  Tickets and confirmations you have filed, all on this device
+                </p>
+              </div>
+              <ArrowRight size={18} className="text-slate-400" aria-hidden />
+            </div>
+          </LinkCard>
           <LinkCard to="/playbook">
             <div className="flex items-center justify-between gap-3">
               <div>

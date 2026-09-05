@@ -8,12 +8,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useMemo } from 'react';
 import { allGuides } from '@/content/guides';
 import { db } from '@/db/db';
-import { loadTripBundle } from '@/db/repo';
+import { documentsRepo, loadTripBundle } from '@/db/repo';
 import { todayIn } from '@/domain/time';
 import { applyStates, lintTrip, type ResolvedFinding } from '@/lint/engine';
 import { bookByTimeline, type BookByEntry } from '@/playbook/bookBy';
 import {
   DEFAULT_SETTINGS,
+  type DocumentMeta,
+  type DocumentOwnerKind,
   type ID,
   type ISODate,
   type ProviderSettings,
@@ -105,4 +107,22 @@ export function useAudit(bundle: TripBundle | null | undefined, today: ISODate):
 
 export function useBookBy(bundle: TripBundle | null | undefined, today: ISODate): BookByEntry[] {
   return useMemo(() => (bundle ? bookByTimeline(bundle, allGuides, today) : []), [bundle, today]);
+}
+
+/** Every document filed against a trip, kept live so attaching or removing one re-renders. */
+export function useTripDocuments(tripId: ID | undefined): DocumentMeta[] {
+  return useLiveQuery(
+    () => (tripId ? documentsRepo.forTrip(tripId) : []),
+    [tripId],
+    [],
+  ) as DocumentMeta[];
+}
+
+/** Documents filed against one booking, item or accommodation, kept live the same way. */
+export function useDocumentsFor(kind: DocumentOwnerKind, ownerId: ID | undefined): DocumentMeta[] {
+  return useLiveQuery(
+    () => (ownerId ? documentsRepo.forOwner(kind, ownerId) : []),
+    [kind, ownerId],
+    [],
+  ) as DocumentMeta[];
 }

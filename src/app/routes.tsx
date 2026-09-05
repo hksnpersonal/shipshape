@@ -8,6 +8,7 @@ import {
 } from '@/features/BookingPages';
 import { ConflictInboxPage, RemindersPage, SettingsPage } from '@/features/InboxPages';
 import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
+import { DocumentsVaultPage } from '@/features/DocumentPages';
 import {
   DaysIndexPage,
   TodayRedirectPage,
@@ -35,6 +36,7 @@ export const router = createBrowserRouter(
         { path: 't/:tripId/bookings/:bookingId', element: <BookingDetailPage /> },
         { path: 't/:tripId/conflicts', element: <ConflictInboxPage /> },
         { path: 't/:tripId/reminders', element: <RemindersPage /> },
+        { path: 't/:tripId/documents', element: <DocumentsVaultPage /> },
         { path: 'playbook', element: <PlaybookIndexPage /> },
         { path: 'playbook/:guideId', element: <PlaybookDetailPage /> },
         { path: 'settings', element: <SettingsPage /> },

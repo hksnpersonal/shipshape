@@ -20,10 +20,11 @@ import {
 import { bookingsRepo } from '@/db/repo';
 import { itemsOfBooking } from '@/domain/bundle';
 import { formatDayLabel } from '@/domain/time';
+import { AttachDocumentButton, DocumentRow } from '@/features/DocumentPages';
 import { bookingLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { bookBy } from '@/playbook/bookBy';
-import { useBookBy, useToday, useTripBundle } from '@/hooks/useTrip';
+import { useBookBy, useDocumentsFor, useToday, useTripBundle } from '@/hooks/useTrip';
 import type { Booking, BookingStatus } from '@/domain/types';
 import type { BookByEntry } from '@/playbook/bookBy';
 import type { Reseller } from '@/playbook/types';
@@ -151,6 +152,7 @@ export function BookingDetailPage() {
   const bundle = useTripBundle(tripId);
   const today = useToday(bundle?.trip.defaultTimeZone);
   const navigate = useNavigate();
+  const documents = useDocumentsFor('booking', bookingId);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const booking = bundle.bookings.find((b) => b.id === bookingId);
@@ -199,6 +201,25 @@ export function BookingDetailPage() {
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{booking.notes}</p>
         ) : null}
       </Card>
+
+      <Section title="Documents">
+        <div className="mb-2">
+          <AttachDocumentButton
+            tripId={bundle.trip.id}
+            attachedTo={{ kind: 'booking', id: booking.id }}
+            label="Attach a ticket or confirmation"
+          />
+        </div>
+        {documents.length > 0 ? (
+          <div className="space-y-2">
+            {documents.map((doc) => (
+              <DocumentRow key={doc.id} doc={doc} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Nothing filed against this booking yet.</p>
+        )}
+      </Section>
 
       {links.length > 0 ? (
         <Section title="Open elsewhere">
