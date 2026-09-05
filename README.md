@@ -1,4 +1,4 @@
-# TripDeck
+# Shipshape
 
 Everything about a trip in one place, plus two things a trip app usually leaves to you.
 
@@ -45,7 +45,7 @@ signal, which is the point: Swiss valleys and Italian regional trains have neith
 The trip lives in this browser's storage and nowhere else. That is what makes it work
 offline, and it means the device holds the only copy.
 
-- **Export** writes a single `.tripdeck.json` file. That is your backup and your way onto
+- **Export** writes a single `.shipshape.json` file. That is your backup and your way onto
   a new phone.
 - **Export the itinerary only** leaves ticket files out, which makes the file small enough
   to send to whoever you are travelling with.

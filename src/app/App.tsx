@@ -22,7 +22,7 @@ export default function App() {
   if (!ready) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <h1 className="text-lg font-semibold text-slate-500">TripDeck</h1>
+        <h1 className="text-lg font-semibold text-slate-500">Shipshape</h1>
       </main>
     );
   }

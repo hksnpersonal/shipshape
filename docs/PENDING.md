@@ -14,8 +14,6 @@ Item 1 below is Phase 0 there.
   and `git remote add origin`. Then set Settings, Pages, Source to "GitHub Actions" once.
   The `deploy.yml` workflow handles everything after that and reads the base path from the
   repository name.
-- **Decide on the name.** "TripDeck" is a working title, present in the manifest, the README
-  and the icon. Cheap now, annoying after publishing.
 
 ## Next, in order
 

@@ -272,9 +272,10 @@ easier business and reaches it several phases sooner.
 
 ## Decisions still open
 
-1. **The name.** "TripDeck" collides with two live products in this exact category. See the
-   naming analysis; `Preflight` was the recommendation, and it fits the audit thesis better
-   than it fits the planner thesis - worth revisiting now the product has changed.
+1. ~~**The name.**~~ **Settled: Shipshape.** "TripDeck" collided with two live products in
+   this exact category. Shipshape means everything stowed and ready for the voyage, which is
+   the promise, and it survives the failure case: "Shipshape says your transfer is too tight"
+   still reads as a friend telling you something.
 2. **Trip-first or product-first.** Phase 0 assumes the Europe 2026 trip matters. If it does
    not, Phase 1 starts now.
 3. **Business model.** Affiliate revenue share, or charge per plan. This changes Phase 3

@@ -1,5 +1,5 @@
 /**
- * TripDeck domain contract.
+ * Shipshape domain contract.
  *
  * Every other module (db, lint, playbook, seed, UI) compiles against these types.
  * `schemas.ts` mirrors them with Zod and a test asserts the two never drift.
@@ -413,7 +413,11 @@ export interface TripBundle {
 
 /** Export / share / seed file format. Documents are base64 when `includeDocuments` was set. */
 export interface ExportFile {
-  format: 'tripdeck';
+  /**
+   * `tripdeck` is what the app was called before it was Shipshape. Exports written then are
+   * still somebody's only copy of a trip, so they go on being readable. Only writing moved.
+   */
+  format: 'shipshape' | 'tripdeck';
   schemaVersion: 1;
   exportedAt: Timestamp;
   appVersion: string;

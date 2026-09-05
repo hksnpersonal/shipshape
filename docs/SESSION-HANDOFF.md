@@ -1,4 +1,4 @@
-# Session handoff - TripDeck - 2026-09-05
+# Session handoff - Shipshape - 2026-09-05
 
 ## Where things stand
 
@@ -17,9 +17,9 @@ Run on 2026-09-05, not quoted from memory.
 
 | Check                                     | Result                                     |
 | ----------------------------------------- | ------------------------------------------ |
-| `npm run verify`                          | 137 tests pass, 10 files                   |
-| `npm run build`                           | clean, 15 precached entries, 748 KiB       |
-| `git status`                              | clean, 11 commits on `main`, no remote     |
+| `npm run verify`                          | 138 tests pass, 10 files                   |
+| `npm run build`                           | clean, 15 precached entries, 756 KiB       |
+| `git status`                              | clean, 16 commits on `main`, no remote     |
 | Audit of the sample trip (today = 04 Sep) | 111 findings: 5 error, 49 warning, 57 info |
 
 The seed was not touched, so the five errors are unchanged and still genuine.
@@ -30,7 +30,7 @@ npx vitest run src/seed/__tests__/report.test.ts --disableConsoleIntercept
 ```
 
 The second prints the audit, and is how rule noise gets diagnosed.
-`checkpoint-2026-09-05-01` tags the state before this session's build.
+`checkpoint-2026-09-05-02` tags the state just before the rename.
 
 ## What landed
 
@@ -39,6 +39,10 @@ The second prints the audit, and is how rule noise gets diagnosed.
   file a ticket.
 - **Item editor**: an Edit button on the item detail screen opens an inline form for title,
   type, start and end time, the fuzzy time label, tags and notes.
+- **Renamed to Shipshape**, from TripDeck, which collided with `tripdeck.io` and
+  `tripdeckai.com`. The IndexedDB database keeps its old name on purpose - it is an internal
+  key, and renaming it would strand a trip already sitting on a phone. Exports now write
+  `.shipshape.json`, and `format: 'tripdeck'` is still accepted on import.
 
 Two things worth not undoing:
 
@@ -67,11 +71,6 @@ Depends on a decision that has not been made: **trip-first or product-first**.
 
 ## Open questions
 
-- **The name is a genuine collision, not a preference.** `tripdeck.io` and `tripdeckai.com`
-  are both live products in this exact category, the second an AI trip planner. Decide
-  before publishing: it is in the manifest, the README, the icon and the `.tripdeck.json`
-  file extension. `Preflight` was the suggestion, though it suits an audit tool more than
-  the reassuring thing this is now meant to be.
 - **Publishing.** No `gh` and no git remote, so `deploy.yml` has nothing to push to. Needs
   a GitHub account, then Settings, Pages, Source set to "GitHub Actions" once.
 - **Git identity** is set repo-locally to `Claude <noreply@anthropic.com>`, matching the

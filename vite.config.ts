@@ -7,7 +7,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.VITE_BASE ?? '/tripdeck/',
+  base: process.env.VITE_BASE ?? '/shipshape/',
   plugins: [
     react(),
     tailwindcss(),
@@ -17,8 +17,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'TripDeck',
-        short_name: 'TripDeck',
+        name: 'Shipshape',
+        short_name: 'Shipshape',
         description: 'Your whole trip in one place, and an audit that finds what is wrong with it.',
         theme_color: '#2563eb',
         background_color: '#f8fafc',

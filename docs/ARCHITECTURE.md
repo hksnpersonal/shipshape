@@ -85,9 +85,12 @@ survive structured clone in every environment. Bytes always do.
 
 ### One file format, four jobs
 
-`.tripdeck.json` is the backup, the migration path to a new phone, the way to share a trip,
+`.shipshape.json` is the backup, the migration path to a new phone, the way to share a trip,
 and the format the built-in sample ships in. The first launch loads the sample through the
 ordinary import path.
+
+Files written before the rename carry `format: 'tripdeck'` and are still read. A backup is
+somebody's only copy of a trip, so the marker is a union and only writing moved.
 
 Using one path for all four means the code that restores someone's only copy is exercised
 on every install, rather than for the first time in an emergency.

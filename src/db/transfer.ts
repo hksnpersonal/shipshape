@@ -89,7 +89,7 @@ export async function exportTrip(
   }
 
   return {
-    format: 'tripdeck',
+    format: 'shipshape',
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     appVersion: APP_VERSION,
@@ -104,7 +104,7 @@ export function exportFileName(bundle: TripBundle): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-  return `${slug || 'trip'}.tripdeck.json`;
+  return `${slug || 'trip'}.shipshape.json`;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +234,7 @@ export function parseExportFile(input: unknown): ExportFile {
   const parsed = ExportFileSchema.safeParse(input);
   if (!parsed.success) {
     throw new ImportError(
-      'That file is not a TripDeck export, or it is damaged.',
+      'That file is not a Shipshape export, or it is damaged.',
       parsed.error.issues.slice(0, 20).map((i) => `${i.path.join('.') || 'file'}: ${i.message}`),
     );
   }

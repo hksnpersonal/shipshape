@@ -33,7 +33,7 @@ export function InstallHint() {
 
   return (
     <Card className="mb-4">
-      <p className="text-sm font-medium">Put TripDeck on your home screen</p>
+      <p className="text-sm font-medium">Put Shipshape on your home screen</p>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         {isIos
           ? 'Tap the share button, then "Add to Home Screen". It then opens full screen and works with no signal.'

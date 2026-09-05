@@ -284,7 +284,7 @@ export function SettingsPage() {
       <Section title="Your data">
         <Card>
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            TripDeck keeps the whole trip in this browser. Nothing is uploaded, and there is no
+            Shipshape keeps the whole trip in this browser. Nothing is uploaded, and there is no
             account. That also means this device holds the only copy, so export regularly and keep
             the file somewhere safe.
           </p>

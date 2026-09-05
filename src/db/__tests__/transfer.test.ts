@@ -43,6 +43,16 @@ describe('import and export', () => {
     }
   });
 
+  // The app was called TripDeck until 2026-09-05. A backup written then is still somebody's
+  // only copy of a trip, and it has to open in the app that replaced it.
+  it('still imports a backup written before the rename', async () => {
+    const old = { ...europe2026, format: 'tripdeck' as const };
+    await importTrip(old, { mode: 'replace' });
+
+    const restored = await loadTripBundle(TRIP_ID);
+    expect(restored?.items).toHaveLength(europe2026.bundle.items.length);
+  });
+
   it('restores a trip byte for byte, documents included', async () => {
     await importTrip(europe2026, { mode: 'replace' });
 
@@ -54,7 +64,7 @@ describe('import and export', () => {
     });
 
     const exported = await exportTrip(TRIP_ID, { includeDocuments: true });
-    expect(exportFileName(exported.bundle)).toBe('europe-2026.tripdeck.json');
+    expect(exportFileName(exported.bundle)).toBe('europe-2026.shipshape.json');
     expect(exported.documents.find((d) => d.id === docId)?.data).toBeTruthy();
 
     // Wipe the device and put it back.

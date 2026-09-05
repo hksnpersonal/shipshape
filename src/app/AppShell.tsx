@@ -41,7 +41,7 @@ export function AppShell() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 md:flex dark:bg-slate-900 dark:text-slate-100">
       <nav className="hidden w-56 shrink-0 border-r border-slate-200 p-4 md:block dark:border-slate-700">
-        <p className="mb-6 px-2 text-lg font-bold">TripDeck</p>
+        <p className="mb-6 px-2 text-lg font-bold">Shipshape</p>
         <ul className="space-y-1">
           {items.map((item) => (
             <li key={item.to}>

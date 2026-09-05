@@ -22,7 +22,7 @@ import type {
   Trip,
 } from '@/domain/types';
 
-export class TripDeckDB extends Dexie {
+export class ShipshapeDB extends Dexie {
   trips!: Table<Trip, ID>;
   days!: Table<Day, ID>;
   items!: Table<Item, ID>;
@@ -36,6 +36,11 @@ export class TripDeckDB extends Dexie {
   findingStates!: Table<FindingState, string>;
   settings!: Table<ProviderSettings, string>;
 
+  /**
+   * The database keeps its original name. It is an internal storage key nobody sees, and
+   * renaming it would leave a trip already sitting on someone's phone in a database the
+   * app no longer opens - present on disk, gone as far as the traveller is concerned.
+   */
   constructor(name = 'tripdeck') {
     super(name);
     // Never remove or edit a version block once it has shipped: Dexie replays them in
@@ -56,7 +61,7 @@ export class TripDeckDB extends Dexie {
   }
 }
 
-export const db = new TripDeckDB();
+export const db = new ShipshapeDB();
 
 /** Every table that holds rows belonging to one trip, for cascade operations. */
 export const TRIP_SCOPED_TABLES = [

@@ -14,7 +14,7 @@ import { SEED_TS } from './helpers';
 import { trip } from './trip';
 
 export const europe2026: ExportFile = {
-  format: 'tripdeck',
+  format: 'shipshape',
   schemaVersion: SCHEMA_VERSION,
   exportedAt: SEED_TS,
   appVersion: APP_VERSION,

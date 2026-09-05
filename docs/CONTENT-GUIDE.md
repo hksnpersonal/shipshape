@@ -1,4 +1,4 @@
-# Converting itinerary notes into TripDeck seed data
+# Converting itinerary notes into Shipshape seed data
 
 This is the rulebook for turning the Europe 2026 source notes into typed seed modules.
 Follow it literally so four people writing four different day ranges produce data that

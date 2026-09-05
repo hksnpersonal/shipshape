@@ -3,7 +3,11 @@
  *
  * A manifest icon has to be a PNG for an install prompt to appear on Android and for iOS
  * to use it on the home screen, and the mark is simple enough to rasterise by hand: a
- * rounded square in the brand blue with a white T.
+ * rounded square in the brand blue with a white S, matching `public/icon.svg`.
+ *
+ * The S is two 270-degree arcs, stacked and facing opposite ways, with round caps closing
+ * the free ends. Unlike the T this replaced, none of its edges are axis-aligned, so every
+ * pixel is supersampled - without that the curves crawl badly at 192px.
  */
 import { deflateSync } from 'node:zlib';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -64,42 +68,68 @@ function encodePng(width, height, rgba) {
 function drawIcon(size, { maskable = false } = {}) {
   const rgba = Buffer.alloc(size * size * 4);
   const radius = maskable ? 0 : size * 0.1875;
-  const inset = maskable ? 0 : 0;
 
-  // The T, proportioned from the 512-unit design and scaled.
-  const s = size / 512;
-  const pad = maskable ? size * 0.14 : 0;
-  const barX0 = 136 * s + pad * 0.5;
-  const barX1 = 376 * s - pad * 0.5;
-  const barY0 = 168 * s + pad * 0.6;
-  const barY1 = 224 * s + pad * 0.6;
-  const stemX0 = 228 * s + pad * 0.5;
-  const stemX1 = 284 * s - pad * 0.5;
-  const stemY1 = 400 * s - pad * 0.6;
+  // The S, proportioned from the 512-unit design. A maskable icon is cropped to a circle
+  // by the platform, so the mark shrinks to stay clear of the crop.
+  const s = (size / 512) * (maskable ? 0.74 : 1);
+  const mid = size / 2;
+  const arcR = 55 * s;
+  const half = 30 * s; // half the stroke width
+  const bowls = [
+    // Upper bowl, open at its lower right; lower bowl, open at its upper left.
+    { cy: mid - arcR, from: 0, to: 90 },
+    { cy: mid + arcR, from: 180, to: 270 },
+  ];
+  const caps = [
+    { x: mid + arcR, y: mid - arcR },
+    { x: mid - arcR, y: mid + arcR },
+  ];
 
   const inRoundedSquare = (x, y) => {
     if (radius === 0) return true;
-    const cx = Math.min(Math.max(x, inset + radius), size - inset - radius);
-    const cy = Math.min(Math.max(y, inset + radius), size - inset - radius);
-    const dx = x - cx;
-    const dy = y - cy;
-    return dx * dx + dy * dy <= radius * radius;
+    const cx = Math.min(Math.max(x, radius), size - radius);
+    const cy = Math.min(Math.max(y, radius), size - radius);
+    return (x - cx) ** 2 + (y - cy) ** 2 <= radius * radius;
   };
 
+  const onMark = (x, y) => {
+    for (const bowl of bowls) {
+      const dx = x - mid;
+      const dy = y - bowl.cy;
+      if (Math.abs(Math.hypot(dx, dy) - arcR) > half) continue;
+      let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      if (angle < 0) angle += 360;
+      // The gap in each bowl is what makes it an S rather than a figure eight.
+      if (angle > bowl.from && angle < bowl.to) continue;
+      return true;
+    }
+    return caps.some((cap) => (x - cap.x) ** 2 + (y - cap.y) ** 2 <= half * half);
+  };
+
+  const STEPS = 4;
   for (let y = 0; y < size; y += 1) {
     for (let x = 0; x < size; x += 1) {
+      let inside = 0;
+      let mark = 0;
+      for (let sy = 0; sy < STEPS; sy += 1) {
+        for (let sx = 0; sx < STEPS; sx += 1) {
+          const px = x + (sx + 0.5) / STEPS;
+          const py = y + (sy + 0.5) / STEPS;
+          if (!inRoundedSquare(px, py)) continue;
+          inside += 1;
+          if (onMark(px, py)) mark += 1;
+        }
+      }
       const i = (y * size + x) * 4;
-      if (!inRoundedSquare(x + 0.5, y + 0.5)) {
+      if (inside === 0) {
         rgba[i + 3] = 0;
         continue;
       }
-      const onBar = x >= barX0 && x < barX1 && y >= barY0 && y < barY1;
-      const onStem = x >= stemX0 && x < stemX1 && y >= barY0 && y < stemY1;
-      const colour = onBar || onStem ? WHITE : BRAND;
-      rgba[i] = colour[0];
-      rgba[i + 1] = colour[1];
-      rgba[i + 2] = colour[2];
-      rgba[i + 3] = 255;
+      const t = mark / inside;
+      for (let c = 0; c < 3; c += 1) {
+        rgba[i + c] = Math.round(BRAND[c] + (WHITE[c] - BRAND[c]) * t);
+      }
+      rgba[i + 3] = Math.round((inside / (STEPS * STEPS)) * 255);
     }
   }
   return encodePng(size, size, rgba);

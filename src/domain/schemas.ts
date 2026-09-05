@@ -361,7 +361,8 @@ export const TripBundleSchema = z.object({
 });
 
 export const ExportFileSchema = z.object({
-  format: z.literal('tripdeck'),
+  // Both spellings: `tripdeck` is the pre-rename marker, still present in older backups.
+  format: z.union([z.literal('shipshape'), z.literal('tripdeck')]),
   schemaVersion: z.literal(1),
   exportedAt: TimestampSchema,
   appVersion: z.string(),
