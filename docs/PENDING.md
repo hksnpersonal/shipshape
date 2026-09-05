@@ -3,6 +3,10 @@
 The living list of what is left. Unlike the handoff, this does not go stale in a week.
 Delete items as they land rather than ticking them.
 
+This list covers the app as it stands. `docs/ROADMAP.md` covers the larger product it could
+become - a full planner with live pricing, collaboration and push - and phases the work.
+Item 1 below is Phase 0 there.
+
 ## Blocked on the user
 
 - **Publish it.** No GitHub remote and no `gh` on this machine. Either
