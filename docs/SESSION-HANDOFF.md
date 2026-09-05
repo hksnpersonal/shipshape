@@ -29,7 +29,7 @@ npm run verify                                    # everything
 npx vitest run src/seed/__tests__/report.test.ts --disableConsoleIntercept
 ```
 
-The second prints the audit and the booking queue, and is how rule noise gets diagnosed.
+The second prints the audit, and is how rule noise gets diagnosed.
 `checkpoint-2026-09-05-01` tags the state before this session's build.
 
 ## What landed
@@ -59,9 +59,9 @@ Depends on a decision that has not been made: **trip-first or product-first**.
 - **Trip-first.** The app is ready to use. What is left is content, not code: file the real
   PDFs from `C:\Users\henso\OneDrive\Documents\MyPersonal\Europe Trips\`, walk the
   itinerary, correct what is wrong now that it can be corrected.
-- **Product-first.** Roadmap Phase 1: Capacitor shell, push plumbing, and a minimal
-  Supabase project whose first job is holding the Claude key server-side. Accounts and sync
-  are deliberately deferred.
+- **Product-first.** Roadmap Phase 1: Capacitor shell, push plumbing, and a Supabase
+  project whose first job is holding the Claude key server-side. Accounts and sync are
+  deliberately deferred.
 
 `docs/PENDING.md` holds the smaller items in priority order.
 
