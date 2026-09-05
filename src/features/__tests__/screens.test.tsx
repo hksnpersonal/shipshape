@@ -671,3 +671,100 @@ describe('linking a booking to an item', () => {
     expect(await db.bookings.get('bk-rail-bsl-par')).toEqual(before);
   });
 });
+
+describe('editing a booking', () => {
+  const BOOKING_ID = 'bk-rail-bsl-par'; // "TGV Lyria, Basel to Paris"
+
+  it('edits a title, date and reference, and shows them on the detail screen', async () => {
+    renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
+    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const titleInput = screen.getByDisplayValue('TGV Lyria, Basel to Paris');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'TGV Lyria to Paris, rebooked');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-12' } });
+    await user.type(screen.getByLabelText('Reference'), 'PNR-84421');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'TGV Lyria to Paris, rebooked' }),
+    ).toBeInTheDocument();
+    const stored = await db.bookings.get(BOOKING_ID);
+    expect(stored?.title).toBe('TGV Lyria to Paris, rebooked');
+    expect(stored?.date).toBe('2026-10-12');
+    expect(stored?.reference).toBe('PNR-84421');
+  });
+
+  it('leaves the booking untouched when the edit is cancelled', async () => {
+    const before = await db.bookings.get(BOOKING_ID);
+    renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
+    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const titleInput = screen.getByDisplayValue('TGV Lyria, Basel to Paris');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Something else entirely');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByRole('heading', { name: 'TGV Lyria, Basel to Paris' })).toBeInTheDocument();
+    expect(await db.bookings.get(BOOKING_ID)).toEqual(before);
+  });
+});
+
+describe('deleting a booking', () => {
+  const BOOKING_ID = 'bk-rail-bsl-par'; // "TGV Lyria, Basel to Paris"
+
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('removes the booking, returns to the board, and leaves a linked item with bookingId null', async () => {
+    const itemId = `${TRIP}-d16-i05`; // "TGV Lyria to Paris", linked to this booking
+    expect((await db.items.get(itemId))?.bookingId).toBe(BOOKING_ID);
+
+    renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
+    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(async () => {
+      expect(await db.bookings.get(BOOKING_ID)).toBeUndefined();
+    });
+    // The delete navigates within the same router - no fresh mount needed to see it.
+    expect(await screen.findByRole('heading', { name: 'Bookings' })).toBeInTheDocument();
+
+    const item = await db.items.get(itemId);
+    expect(item).toBeDefined();
+    expect(item?.bookingId).toBeNull();
+  });
+
+  it('does not delete a document filed against the booking it removes', async () => {
+    const docId = await documentsRepo.attach(TRIP, new Blob(['x'], { type: 'application/pdf' }), {
+      name: 'tgv-ticket.pdf',
+      attachedTo: { kind: 'booking', id: BOOKING_ID },
+    });
+
+    const bookingScreen = renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
+    await screen.findByText('tgv-ticket.pdf');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(async () => {
+      expect(await db.bookings.get(BOOKING_ID)).toBeUndefined();
+    });
+    expect(await db.documents.get(docId)).toBeDefined();
+    expect(await db.documentBytes.get(docId)).toBeDefined();
+    bookingScreen.unmount();
+
+    // Still filed and visible from the vault, not merely surviving in the database.
+    renderAt(`/t/${TRIP}/documents`);
+    expect(await screen.findByText('tgv-ticket.pdf')).toBeInTheDocument();
+  });
+});

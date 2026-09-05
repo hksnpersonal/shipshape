@@ -322,6 +322,158 @@ export function BookingsBoardPage() {
   );
 }
 
+/**
+ * Everything correctable about a booking already captured, mirroring ItemEditForm's
+ * shape: Save and Cancel on the left, Delete pushed to the right since it is a different
+ * kind of action from the rest of the form.
+ */
+function BookingEditForm({
+  booking,
+  onCancel,
+  onSaved,
+}: {
+  booking: Booking;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState(booking.title);
+  const [date, setDate] = useState(booking.date);
+  const [kind, setKind] = useState<BookingKind>(booking.kind);
+  const [status, setStatus] = useState<BookingStatus>(booking.status);
+  const [reference, setReference] = useState(booking.reference ?? '');
+  const [notes, setNotes] = useState(booking.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  // Removing unlinks every item that pointed here and leaves documents alone - the
+  // traveller needs to know that before confirming, not discover it afterwards.
+  const remove = async () => {
+    if (
+      !window.confirm(
+        `Remove ${booking.title}? Any item linked to it stays, and any document filed against it stays in the vault.`,
+      )
+    ) {
+      return;
+    }
+    await bookingsRepo.remove(booking.id);
+    navigate(`/t/${booking.tripId}/bookings`);
+  };
+
+  const save = async () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setError('Give it a title.');
+      return;
+    }
+    if (!date) {
+      setError('Give it a date.');
+      return;
+    }
+    await bookingsRepo.patch(booking.id, {
+      title: trimmedTitle,
+      date,
+      kind,
+      status,
+      // An empty string, not undefined: Dexie's update does not reliably drop a key when
+      // handed undefined, so clearing the field this way could leave the old value behind.
+      reference,
+      notes,
+    });
+    onSaved();
+  };
+
+  return (
+    <Card className="mb-4">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Title</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className={fieldClass}
+          />
+        </label>
+
+        <div className="flex gap-3">
+          <label className="flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Date</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className={fieldClass}
+            />
+          </label>
+          <label className="flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Kind</span>
+            <select
+              value={kind}
+              onChange={(event) => setKind(event.target.value as BookingKind)}
+              className={fieldClass}
+            >
+              {BOOKING_KINDS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Status</span>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as BookingStatus)}
+            className={fieldClass}
+          >
+            {BOOKING_STATUSES.map((option) => (
+              <option key={option} value={option}>
+                {STATUS_WORDS[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Reference</span>
+          <input
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            placeholder="Confirmation code"
+            className={fieldClass}
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+          />
+        </label>
+
+        {error ? (
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <Button variant="primary" onClick={() => void save()}>
+            Save
+          </Button>
+          <Button onClick={onCancel}>Cancel</Button>
+          <span className="flex-1" />
+          <Button variant="danger" onClick={() => void remove()}>
+            Delete
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function TrustIcon({ trust }: { trust: Reseller['trust'] }) {
   if (trust === 'fine') return <ShieldCheck size={15} className="text-emerald-600" aria-hidden />;
   if (trust === 'avoid') return <ShieldX size={15} className="text-rose-600" aria-hidden />;
@@ -340,6 +492,7 @@ export function BookingDetailPage() {
   const today = useToday(bundle?.trip.defaultTimeZone);
   const navigate = useNavigate();
   const documents = useDocumentsFor('booking', bookingId);
+  const [editing, setEditing] = useState(false);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const booking = bundle.bookings.find((b) => b.id === bookingId);
@@ -357,37 +510,51 @@ export function BookingDetailPage() {
       <PageHeader
         title={booking.title}
         subtitle={`${formatDayLabel(booking.date)}${booking.depart ? ` at ${booking.depart}` : ''}`}
-        actions={<Button onClick={() => void navigate(-1)}>Back</Button>}
+        actions={
+          <>
+            {!editing ? <Button onClick={() => setEditing(true)}>Edit</Button> : null}
+            <Button onClick={() => void navigate(-1)}>Back</Button>
+          </>
+        }
       />
 
-      <Card className="mb-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Chip tone={statusTone(booking.status)}>{STATUS_WORDS[booking.status]}</Chip>
-          {result.date ? <Chip>Book by {result.date}</Chip> : <Chip>Bought on the day</Chip>}
-          {result.opensOn ? <Chip>On sale from {result.opensOn}</Chip> : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(['to_book', 'booked', 'confirmed', 'on_site', 'not_needed'] as BookingStatus[]).map(
-            (status) => (
-              <Button
-                key={status}
-                variant={booking.status === status ? 'primary' : 'secondary'}
-                onClick={() => setStatus(status)}
-              >
-                {STATUS_WORDS[status]}
-              </Button>
-            ),
-          )}
-        </div>
-        {booking.refundable === false ? (
-          <p className="mt-3 text-sm font-medium text-rose-700 dark:text-rose-300">
-            Not refundable. Treat the departure time as fixed and build in a real margin.
-          </p>
-        ) : null}
-        {booking.notes ? (
-          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{booking.notes}</p>
-        ) : null}
-      </Card>
+      {editing ? (
+        <BookingEditForm
+          key={booking.id}
+          booking={booking}
+          onCancel={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      ) : (
+        <Card className="mb-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Chip tone={statusTone(booking.status)}>{STATUS_WORDS[booking.status]}</Chip>
+            {result.date ? <Chip>Book by {result.date}</Chip> : <Chip>Bought on the day</Chip>}
+            {result.opensOn ? <Chip>On sale from {result.opensOn}</Chip> : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['to_book', 'booked', 'confirmed', 'on_site', 'not_needed'] as BookingStatus[]).map(
+              (status) => (
+                <Button
+                  key={status}
+                  variant={booking.status === status ? 'primary' : 'secondary'}
+                  onClick={() => setStatus(status)}
+                >
+                  {STATUS_WORDS[status]}
+                </Button>
+              ),
+            )}
+          </div>
+          {booking.refundable === false ? (
+            <p className="mt-3 text-sm font-medium text-rose-700 dark:text-rose-300">
+              Not refundable. Treat the departure time as fixed and build in a real margin.
+            </p>
+          ) : null}
+          {booking.notes ? (
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{booking.notes}</p>
+          ) : null}
+        </Card>
+      )}
 
       <Section title="Documents">
         <div className="mb-2">

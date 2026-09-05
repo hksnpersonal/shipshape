@@ -21,11 +21,13 @@ Item 1 below is Phase 0 there.
 
 ## Next, in order
 
-1. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
-   the interface sets `bookingId`. `bookingsRepo.remove` already unlinks on delete, so the
-   one-way link is the only gap.
-2. **Edit or delete a booking.** Capture and status changes exist; correcting a date or a
-   reference does not. `bookingsRepo.patch` and `remove` are both there and unused.
+Phase 0 of `docs/ROADMAP.md` is done. Everything below is Phase 1 or later, and none of it
+is reachable before the trip departs on 9 October - see the handoff for that argument.
+
+1. **Edit the trip and its days.** Name, dates, timezone, a day's city or theme. Everything
+   else can now be corrected in the app; these still mean editing the seed.
+2. **Accommodations have no editor either.** `db.accommodations` is read everywhere and
+   written only by the importer.
 
 ## Later
 
