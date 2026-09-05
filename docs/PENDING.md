@@ -11,9 +11,13 @@ Item 1 below is Phase 0 there.
 
 - **Publish it.** No GitHub remote and no `gh` on this machine. Either
   `winget install GitHub.cli` then `gh repo create`, or create the repository on github.com
-  and `git remote add origin`. Then set Settings, Pages, Source to "GitHub Actions" once.
-  The `deploy.yml` workflow handles everything after that and reads the base path from the
-  repository name.
+  and `git remote add origin`. **Name the repository `shipshape`**: `deploy.yml` reads the
+  base path from it, and `vite.config.ts` now defaults to `/shipshape/`. Then set Settings,
+  Pages, Source to "GitHub Actions" once.
+- **Rename the working folder.** It is still `Projects\tripdeck`. Nothing reads the folder
+  name, so this is tidiness rather than a bug, and it could not be done from inside a
+  session running in that folder. `mv ~/Projects/tripdeck ~/Projects/shipshape` from
+  anywhere else.
 
 ## Next, in order
 
