@@ -598,3 +598,76 @@ describe('adding a booking', () => {
     expect(guideLink.closest('a')).toHaveAttribute('href', '/playbook/it-trenitalia-highspeed');
   });
 });
+
+describe('linking a booking to an item', () => {
+  it('links an unlinked item, which then shows the booking on the item screen', async () => {
+    const itemId = `${TRIP}-d01-i03`; // "Leonardo Express to Roma Termini", unlinked
+    renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+    expect(screen.queryByText('TGV Lyria, Basel to Paris')).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('option', { name: /TGV Lyria, Basel to Paris/ })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Booking'), 'bk-rail-bsl-par');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('TGV Lyria, Basel to Paris')).toBeInTheDocument();
+    expect((await db.items.get(itemId))?.bookingId).toBe('bk-rail-bsl-par');
+  });
+
+  it('unlinking writes null, not an empty string', async () => {
+    const itemId = `${TRIP}-d16-i05`; // "TGV Lyria to Paris", linked to bk-rail-bsl-par
+    renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('TGV Lyria to Paris');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.selectOptions(screen.getByLabelText('Booking'), 'Not linked');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const stored = await db.items.get(itemId);
+      expect(stored?.bookingId).toBeNull();
+    });
+  });
+
+  it('shows the linked booking as a status chip on the day timeline', async () => {
+    const itemId = `${TRIP}-d01-i03`;
+    const itemScreen = renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.selectOptions(screen.getByLabelText('Booking'), 'bk-rail-bsl-par');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(async () => {
+      expect((await db.items.get(itemId))?.bookingId).toBe('bk-rail-bsl-par');
+    });
+    itemScreen.unmount();
+
+    // A fresh mount of the day, where a traveller actually reads their plan - not the
+    // item detail screen the link was made on.
+    renderAt(`/t/${TRIP}/days/${TRIP}-d01`);
+    const link = await screen.findByRole('link', { name: 'Leonardo Express to Roma Termini' });
+    const row = link.closest('div.rounded-xl') as HTMLElement;
+    expect(within(row).getByText('booked')).toBeInTheDocument();
+  });
+
+  it('leaves the booking itself untouched when unlinked', async () => {
+    const itemId = `${TRIP}-d16-i05`;
+    const before = await db.bookings.get('bk-rail-bsl-par');
+    renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('TGV Lyria to Paris');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.selectOptions(screen.getByLabelText('Booking'), 'Not linked');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      expect((await db.items.get(itemId))?.bookingId).toBeNull();
+    });
+    expect(await db.bookings.get('bk-rail-bsl-par')).toEqual(before);
+  });
+});

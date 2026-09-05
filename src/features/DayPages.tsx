@@ -36,7 +36,7 @@ import { itemLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
 import type { DaySwapPlan } from '@/domain/swap';
-import type { ID, Item, ItemType, Tag, TimeLabel, TripBundle } from '@/domain/types';
+import type { Booking, ID, Item, ItemType, Tag, TimeLabel, TripBundle } from '@/domain/types';
 import { TAGS } from '@/domain/types';
 
 const ITEM_TYPES: ItemType[] = [
@@ -430,10 +430,12 @@ export function DayTimelinePage() {
  */
 function ItemEditForm({
   item,
+  bookings,
   onCancel,
   onSaved,
 }: {
   item: Item;
+  bookings: Booking[];
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -446,8 +448,13 @@ function ItemEditForm({
   const [timeLabel, setTimeLabel] = useState<TimeLabel | ''>(item.timeLabel ?? '');
   const [approx, setApprox] = useState(item.timeApprox ?? false);
   const [tags, setTags] = useState<Tag[]>(item.tags);
+  // A select's value is always a string, so "not linked" is '' here and becomes null on
+  // save - never the empty string itself, which several rules and bookingOf test against.
+  const [bookingId, setBookingId] = useState(item.bookingId ?? '');
   const [notes, setNotes] = useState(item.notes ?? '');
   const [error, setError] = useState<string | null>(null);
+
+  const sortedBookings = [...bookings].sort((a, b) => a.date.localeCompare(b.date));
 
   // The booking outlives the line that pointed at it, so removal touches only this row.
   const remove = async () => {
@@ -480,6 +487,7 @@ function ItemEditForm({
       // approximate about.
       timeApprox: time === '' ? false : approx,
       tags,
+      bookingId: bookingId === '' ? null : bookingId,
       notes,
     });
     onSaved();
@@ -581,6 +589,22 @@ function ItemEditForm({
         </div>
 
         <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Booking</span>
+          <select
+            value={bookingId}
+            onChange={(event) => setBookingId(event.target.value)}
+            className={fieldClass}
+          >
+            <option value="">Not linked</option>
+            {sortedBookings.map((booking) => (
+              <option key={booking.id} value={booking.id}>
+                {booking.title} · {formatDayLabel(booking.date)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
           <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
           <textarea
             value={notes}
@@ -641,6 +665,7 @@ export function ItemDetailPage() {
         <ItemEditForm
           key={item.id}
           item={item}
+          bookings={bundle.bookings}
           onCancel={() => setEditing(false)}
           onSaved={() => setEditing(false)}
         />
