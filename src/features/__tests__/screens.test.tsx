@@ -11,7 +11,7 @@ import { db } from '@/db/db';
 import { importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
 import { documentsRepo, settingsRepo } from '@/db/repo';
-import { BookingDetailPage } from '@/features/BookingPages';
+import { BookingDetailPage, BookingsBoardPage } from '@/features/BookingPages';
 import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
 import { DocumentsVaultPage, OBJECT_URL_TTL_MS } from '@/features/DocumentPages';
 import { ConflictInboxPage } from '@/features/InboxPages';
@@ -31,6 +31,7 @@ function renderAt(path: string) {
           { path: 't/:tripId', element: <TripHomePage /> },
           { path: 't/:tripId/days', element: <DaysIndexPage /> },
           { path: 't/:tripId/documents', element: <DocumentsVaultPage /> },
+          { path: 't/:tripId/bookings', element: <BookingsBoardPage /> },
           { path: 't/:tripId/bookings/:bookingId', element: <BookingDetailPage /> },
           { path: 't/:tripId/items/:itemId', element: <ItemDetailPage /> },
         ],
@@ -526,5 +527,74 @@ describe('deleting an item', () => {
       expect(await db.items.get(itemId)).toBeUndefined();
     });
     expect(await db.bookings.get('bk-rail-bsl-par')).toBeDefined();
+  });
+});
+
+describe('adding a booking', () => {
+  it('adds a booking that appears under Still to book, and persists with the right ids', async () => {
+    renderAt(`/t/${TRIP}/bookings`);
+    await screen.findByRole('heading', { name: 'Bookings' });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.type(screen.getByLabelText('Title'), 'Ferry to Bellagio');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-10' } });
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    const heading = await screen.findByText('Ferry to Bellagio');
+    expect(heading.closest('section')?.querySelector('h2')).toHaveTextContent('Still to book');
+
+    const stored = (await db.bookings.toArray()).find((b) => b.title === 'Ferry to Bellagio');
+    expect(stored?.tripId).toBe(TRIP);
+    expect(stored?.date).toBe('2026-09-10');
+  });
+
+  it('defaults a new booking to to_book, not booked', async () => {
+    renderAt(`/t/${TRIP}/bookings`);
+    await screen.findByRole('heading', { name: 'Bookings' });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.type(screen.getByLabelText('Title'), 'Airport transfer');
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await screen.findByText('Airport transfer');
+    const stored = (await db.bookings.toArray()).find((b) => b.title === 'Airport transfer');
+    expect(stored?.status).toBe('to_book');
+  });
+
+  it('refuses a blank title and a missing date', async () => {
+    renderAt(`/t/${TRIP}/bookings`);
+    await screen.findByRole('heading', { name: 'Bookings' });
+    const before = await db.bookings.count();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByText('Give it a title.')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Title'), 'Something to book');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByText('Give it a date.')).toBeInTheDocument();
+
+    expect(await db.bookings.count()).toBe(before);
+  });
+
+  it('shows a matching guide as the title is typed, linking to the playbook', async () => {
+    renderAt(`/t/${TRIP}/bookings`);
+    await screen.findByRole('heading', { name: 'Bookings' });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    expect(screen.queryByText('Frecciarossa and other Trenitalia high-speed trains')).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText('Kind'), 'train');
+    await user.type(screen.getByLabelText('Title'), 'Frecciarossa to Florence');
+
+    const guideLink = await screen.findByText(
+      'Frecciarossa and other Trenitalia high-speed trains',
+    );
+    expect(guideLink.closest('a')).toHaveAttribute('href', '/playbook/it-trenitalia-highspeed');
   });
 });

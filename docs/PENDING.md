@@ -21,11 +21,11 @@ Item 1 below is Phase 0 there.
 
 ## Next, in order
 
-1. **Quick capture for bookings.** A short form to add a booking from a confirmation email,
-   with the guide match shown as you type. `bookingsRepo.add` already exists. This is the
-   one that matters before departure - there are still things to book.
-2. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
-   the interface sets `bookingId`.
+1. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
+   the interface sets `bookingId`. `bookingsRepo.remove` already unlinks on delete, so the
+   one-way link is the only gap.
+2. **Edit or delete a booking.** Capture and status changes exist; correcting a date or a
+   reference does not. `bookingsRepo.patch` and `remove` are both there and unused.
 
 ## Later
 

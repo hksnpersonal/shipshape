@@ -4,8 +4,9 @@
  * This is the screen that replaces the pile of confirmation emails, and the guide card is
  * what replaces searching for "is X worth booking in advance".
  */
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ExternalLink, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react';
+import { ExternalLink, Plus, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -25,7 +26,7 @@ import { bookingLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { bookBy } from '@/playbook/bookBy';
 import { useBookBy, useDocumentsFor, useToday, useTripBundle } from '@/hooks/useTrip';
-import type { Booking, BookingStatus } from '@/domain/types';
+import type { Booking, BookingKind, BookingStatus, ID } from '@/domain/types';
 import type { BookByEntry } from '@/playbook/bookBy';
 import type { Reseller } from '@/playbook/types';
 
@@ -37,6 +38,35 @@ const STATUS_WORDS: Record<BookingStatus, string> = {
   not_needed: 'Nothing to book',
   cancelled: 'Cancelled',
 };
+
+const BOOKING_KINDS: BookingKind[] = [
+  'flight',
+  'train',
+  'regional-train',
+  'international-train',
+  'ferry',
+  'mountain-railway',
+  'gondola',
+  'bus',
+  'hotel',
+  'restaurant',
+  'attraction',
+  'pass',
+  'city-card',
+  'other',
+];
+
+const BOOKING_STATUSES: BookingStatus[] = [
+  'to_book',
+  'booked',
+  'confirmed',
+  'on_site',
+  'not_needed',
+  'cancelled',
+];
+
+const fieldClass =
+  'w-full min-h-[40px] rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600 dark:bg-slate-800';
 
 function statusTone(status: BookingStatus) {
   if (status === 'to_book') return 'warn' as const;
@@ -66,11 +96,152 @@ function urgencyLabel(entry: BookByEntry): {
   }
 }
 
+/**
+ * The whole of adding a booking: title, date, kind, status and the confirmation code -
+ * nothing about the trip itself. It is not linked to any item; that stays a job for later.
+ */
+function AddBookingForm({
+  tripId,
+  onCancel,
+  onAdded,
+}: {
+  tripId: ID;
+  onCancel: () => void;
+  onAdded: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [kind, setKind] = useState<BookingKind>('other');
+  const [status, setStatus] = useState<BookingStatus>('to_book');
+  const [reference, setReference] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // A live preview, not a saved booking, so the advice shows up while someone is still
+  // typing. The cast holds because `matchGuides` reads a booking through `isBooking`,
+  // which only tests for `kind` and `status`, and guards every other field it touches. If
+  // it ever needs something required, this is where that breaks - the guide-match test
+  // covers it.
+  const draftGuide = title.trim()
+    ? matchGuides({ title, kind, status } as Booking, allGuides)[0]?.guide
+    : undefined;
+
+  const add = async () => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setError('Give it a title.');
+      return;
+    }
+    if (!date) {
+      setError('Give it a date.');
+      return;
+    }
+    await bookingsRepo.add(tripId, {
+      title: trimmedTitle,
+      date,
+      kind,
+      status,
+      ...(reference.trim() ? { reference: reference.trim() } : {}),
+    });
+    onAdded();
+  };
+
+  return (
+    <Card className="mb-4">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Title</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Frecciarossa to Florence"
+            className={fieldClass}
+          />
+        </label>
+
+        <div className="flex gap-3">
+          <label className="flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Date</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className={fieldClass}
+            />
+          </label>
+          <label className="flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Kind</span>
+            <select
+              value={kind}
+              onChange={(event) => setKind(event.target.value as BookingKind)}
+              className={fieldClass}
+            >
+              {BOOKING_KINDS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Status</span>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as BookingStatus)}
+            className={fieldClass}
+          >
+            {BOOKING_STATUSES.map((option) => (
+              <option key={option} value={option}>
+                {STATUS_WORDS[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">
+            Reference (optional)
+          </span>
+          <input
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            placeholder="Confirmation code"
+            className={fieldClass}
+          />
+        </label>
+
+        {draftGuide ? (
+          <Link
+            to={`/playbook/${draftGuide.id}`}
+            className="block rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-700/50"
+          >
+            <p className="font-medium">{draftGuide.title}</p>
+            <p className="text-slate-500 dark:text-slate-400">{draftGuide.bookAdvice.note}</p>
+          </Link>
+        ) : null}
+
+        {error ? (
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <Button variant="primary" onClick={() => void add()}>
+            Add
+          </Button>
+          <Button onClick={onCancel}>Cancel</Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function BookingsBoardPage() {
   const { tripId } = useParams();
   const bundle = useTripBundle(tripId);
   const today = useToday(bundle?.trip.defaultTimeZone);
   const entries = useBookBy(bundle, today);
+  const [addingBooking, setAddingBooking] = useState(false);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
 
@@ -102,7 +273,23 @@ export function BookingsBoardPage() {
       <PageHeader
         title="Bookings"
         subtitle={`${entries.length} things across the trip, ordered by when they need doing`}
+        actions={
+          !addingBooking ? (
+            <Button variant="primary" onClick={() => setAddingBooking(true)}>
+              <Plus size={15} aria-hidden /> Add a booking
+            </Button>
+          ) : undefined
+        }
       />
+
+      {addingBooking ? (
+        <AddBookingForm
+          tripId={bundle.trip.id}
+          onCancel={() => setAddingBooking(false)}
+          onAdded={() => setAddingBooking(false)}
+        />
+      ) : null}
+
       {groups.map((group) =>
         group.entries.length === 0 ? null : (
           <Section key={group.title} title={`${group.title} (${group.entries.length})`}>
