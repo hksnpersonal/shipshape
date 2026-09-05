@@ -2,17 +2,14 @@
 
 ## Where things stand
 
-Two things happened. The app finished the work it needed before the traveller flies, and
-the product it is trying to become changed shape.
-
 **The app.** Tickets already bought can now be filed, and the plan can be corrected without
 editing the seed. That closes the last two gaps in the original brief.
 
 **The product.** The stated intention is no longer "audit my half-booked plan". It is
 _remove planning as a task_: answer a few questions, get a whole trip, review rather than
 build, then rely on it during the trip. `docs/ROADMAP.md` records that, what it costs, and
-what is blocked by other people's commercial terms rather than by effort. Read it before
-planning any work.
+what is blocked by other people's terms rather than by effort. Read it before planning
+work.
 
 ## Verified state
 
@@ -25,15 +22,14 @@ Run on 2026-09-05, not quoted from memory.
 | `git status`                              | clean, 11 commits on `main`, no remote     |
 | Audit of the sample trip (today = 04 Sep) | 111 findings: 5 error, 49 warning, 57 info |
 
-The five errors are unchanged and still genuine - the product demonstrating itself. The
-seed was not touched this session.
+The seed was not touched, so the five errors are unchanged and still genuine.
 
 ```
 npm run verify                                    # everything
-npx vitest run src/seed                           # the 17 source conflicts, on the real trip
 npx vitest run src/seed/__tests__/report.test.ts --disableConsoleIntercept
 ```
 
+The second prints the audit and the booking queue, and is how rule noise gets diagnosed.
 `checkpoint-2026-09-05-01` tags the state before this session's build.
 
 ## What landed
@@ -60,10 +56,9 @@ contradictions rather than preventing them.
 
 Depends on a decision that has not been made: **trip-first or product-first**.
 
-- **Trip-first.** The app is ready to use. What is left is content and rehearsal, not code:
-  file the real PDFs from
-  `C:\Users\henso\OneDrive\Documents\MyPersonal\Europe Trips\Hotels\` and `\Trains\`, walk
-  the itinerary, correct what is wrong now that it can be corrected.
+- **Trip-first.** The app is ready to use. What is left is content, not code: file the real
+  PDFs from `C:\Users\henso\OneDrive\Documents\MyPersonal\Europe Trips\`, walk the
+  itinerary, correct what is wrong now that it can be corrected.
 - **Product-first.** Roadmap Phase 1: Capacitor shell, push plumbing, and a minimal
   Supabase project whose first job is holding the Claude key server-side. Accounts and sync
   are deliberately deferred.
@@ -75,8 +70,8 @@ Depends on a decision that has not been made: **trip-first or product-first**.
 - **The name is a genuine collision, not a preference.** `tripdeck.io` and `tripdeckai.com`
   are both live products in this exact category, the second an AI trip planner. Decide
   before publishing: it is in the manifest, the README, the icon and the `.tripdeck.json`
-  file extension. `Preflight` was the suggestion, though it suits an audit tool better than
-  the reassuring thing the product is now meant to be.
+  file extension. `Preflight` was the suggestion, though it suits an audit tool more than
+  the reassuring thing this is now meant to be.
 - **Publishing.** No `gh` and no git remote, so `deploy.yml` has nothing to push to. Needs
   a GitHub account, then Settings, Pages, Source set to "GitHub Actions" once.
 - **Git identity** is set repo-locally to `Claude <noreply@anthropic.com>`, matching the
