@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Plus,
   SkipForward,
 } from 'lucide-react';
 import { allGuides } from '@/content/guides';
@@ -35,7 +36,7 @@ import { itemLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
 import type { DaySwapPlan } from '@/domain/swap';
-import type { Item, ItemType, Tag, TimeLabel, TripBundle } from '@/domain/types';
+import type { ID, Item, ItemType, Tag, TimeLabel, TripBundle } from '@/domain/types';
 import { TAGS } from '@/domain/types';
 
 const ITEM_TYPES: ItemType[] = [
@@ -184,6 +185,74 @@ function ItemRow({
   );
 }
 
+/**
+ * The whole of adding a line: a title and, optionally, when it starts. Everything else
+ * an item can carry is reachable afterwards through Edit, which is the point - a
+ * twelve-field form before someone can write down "dinner at 8" is exactly the friction
+ * this exists to remove.
+ */
+function AddItemForm({
+  tripId,
+  dayId,
+  onCancel,
+  onAdded,
+}: {
+  tripId: ID;
+  dayId: ID;
+  onCancel: () => void;
+  onAdded: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [time, setTime] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const add = async () => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setError('Give it a title.');
+      return;
+    }
+    await itemsRepo.add(tripId, dayId, { title: trimmed, time: time === '' ? null : time });
+    onAdded();
+  };
+
+  return (
+    <Card className="mt-2">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Title</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Dinner at 8"
+            className={fieldClass}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">
+            Start time (optional)
+          </span>
+          <input
+            type="time"
+            value={time}
+            onChange={(event) => setTime(event.target.value)}
+            className={fieldClass}
+          />
+        </label>
+        {error ? (
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
+        ) : null}
+        <div className="flex gap-2">
+          <Button variant="primary" onClick={() => void add()}>
+            Add
+          </Button>
+          <Button onClick={onCancel}>Cancel</Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function DayTimelinePage() {
   const { tripId, dayId } = useParams();
   const bundle = useTripBundle(tripId);
@@ -191,6 +260,7 @@ export function DayTimelinePage() {
   const audit = useAudit(bundle, today);
   const [params, setParams] = useSearchParams();
   const [swapResult, setSwapResult] = useState<DaySwapPlan | null>(null);
+  const [addingItem, setAddingItem] = useState(false);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const day = bundle.days.find((d) => d.id === dayId);
@@ -328,6 +398,28 @@ export function DayTimelinePage() {
           ))}
         </div>
       )}
+
+      {addingItem ? (
+        <AddItemForm
+          tripId={bundle.trip.id}
+          dayId={day.id}
+          onCancel={() => setAddingItem(false)}
+          onAdded={() => {
+            setAddingItem(false);
+            // A new line carries no tags, so under an active filter it would land somewhere
+            // the user cannot see. Appearing to swallow what someone just typed is the one
+            // thing this must not do, so the filter gives way to the new item.
+            if (active.size > 0) {
+              params.delete('tags');
+              setParams(params, { replace: true });
+            }
+          }}
+        />
+      ) : (
+        <Button className="mt-2" onClick={() => setAddingItem(true)}>
+          <Plus size={15} aria-hidden /> Add an item
+        </Button>
+      )}
     </>
   );
 }
@@ -345,6 +437,7 @@ function ItemEditForm({
   onCancel: () => void;
   onSaved: () => void;
 }) {
+  const navigate = useNavigate();
   const [title, setTitle] = useState(item.title);
   const [type, setType] = useState<ItemType>(item.type);
   // Wall-clock strings, exactly as typed. Never routed through a Date or a timezone.
@@ -354,6 +447,13 @@ function ItemEditForm({
   const [tags, setTags] = useState<Tag[]>(item.tags);
   const [notes, setNotes] = useState(item.notes ?? '');
   const [error, setError] = useState<string | null>(null);
+
+  // The booking outlives the line that pointed at it, so removal touches only this row.
+  const remove = async () => {
+    if (!window.confirm(`Remove ${item.title}? This cannot be undone.`)) return;
+    await itemsRepo.remove(item.id);
+    navigate(`/t/${item.tripId}/days/${item.dayId}`);
+  };
 
   const toggleTag = (tag: Tag) => {
     setTags((current) =>
@@ -486,6 +586,10 @@ function ItemEditForm({
             Save
           </Button>
           <Button onClick={onCancel}>Cancel</Button>
+          <span className="flex-1" />
+          <Button variant="danger" onClick={() => void remove()}>
+            Delete
+          </Button>
         </div>
       </div>
     </Card>

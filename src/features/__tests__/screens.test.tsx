@@ -378,3 +378,131 @@ describe('editing an item inline', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('adding an item', () => {
+  const DAY_ID = `${TRIP}-d01`;
+
+  it('adds an item with a title, which appears on the day and persists', async () => {
+    renderAt(`/t/${TRIP}/days/${DAY_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add an item' }));
+    await user.type(screen.getByLabelText('Title'), 'Buy gelato');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByText('Buy gelato')).toBeInTheDocument();
+    const items = await db.items.where('dayId').equals(DAY_ID).toArray();
+    const stored = items.find((i) => i.title === 'Buy gelato');
+    expect(stored?.tripId).toBe(TRIP);
+    expect(stored?.dayId).toBe(DAY_ID);
+  });
+
+  // A new line has no tags, so under a filter it would land out of sight. Appearing to
+  // discard what someone just typed is worse than any amount of filter state.
+  it('drops the tag filter so a new item cannot land out of sight', async () => {
+    renderAt(`/t/${TRIP}/days/${DAY_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'MUST' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Leonardo Express to Roma Termini')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add an item' }));
+    await user.type(screen.getByLabelText('Title'), 'Buy a metro pass');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByText('Buy a metro pass')).toBeInTheDocument();
+    // The filter gave way, so the rest of the day is back too.
+    expect(screen.getByText('Leonardo Express to Roma Termini')).toBeInTheDocument();
+  });
+
+  it('persists an empty start time as null, not an empty string', async () => {
+    renderAt(`/t/${TRIP}/days/${DAY_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add an item' }));
+    await user.type(screen.getByLabelText('Title'), 'Buy stamps');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    await screen.findByText('Buy stamps');
+    const items = await db.items.where('dayId').equals(DAY_ID).toArray();
+    const stored = items.find((i) => i.title === 'Buy stamps');
+    expect(stored?.time).toBeNull();
+  });
+
+  it('refuses a blank title', async () => {
+    renderAt(`/t/${TRIP}/days/${DAY_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+    const before = await db.items.where('dayId').equals(DAY_ID).count();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add an item' }));
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByText('Give it a title.')).toBeInTheDocument();
+    expect(await db.items.where('dayId').equals(DAY_ID).count()).toBe(before);
+  });
+});
+
+describe('deleting an item', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('removes the row and returns to the day', async () => {
+    const itemId = `${TRIP}-d01-i03`; // "Leonardo Express to Roma Termini"
+    renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(async () => {
+      expect(await db.items.get(itemId)).toBeUndefined();
+    });
+    expect(await screen.findByText(/Arrival and a romantic Rome evening/)).toBeInTheDocument();
+  });
+
+  it('re-runs the audit: removing the stale Paris arrival clears its finding', async () => {
+    const itemId = `${TRIP}-d16-i06`; // "Arrive Paris Gare de Lyon"
+    const itemScreen = renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('Arrive Paris Gare de Lyon');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(async () => {
+      expect(await db.items.get(itemId)).toBeUndefined();
+    });
+    itemScreen.unmount();
+
+    // A fresh mount, not the same live subtree: proves the plan re-checks itself when a
+    // line goes, not only when one changes.
+    renderAt(`/t/${TRIP}/conflicts`);
+    await screen.findByText(/Cannot happen as planned/);
+    expect(
+      screen.queryByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not touch the booking behind the item', async () => {
+    const itemId = `${TRIP}-d16-i05`; // "TGV Lyria to Paris", linked to bk-rail-bsl-par
+    renderAt(`/t/${TRIP}/items/${itemId}`);
+    await screen.findByText('TGV Lyria to Paris');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(async () => {
+      expect(await db.items.get(itemId)).toBeUndefined();
+    });
+    expect(await db.bookings.get('bk-rail-bsl-par')).toBeDefined();
+  });
+});
