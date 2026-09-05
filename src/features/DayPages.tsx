@@ -35,8 +35,24 @@ import { itemLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
 import type { DaySwapPlan } from '@/domain/swap';
-import type { Item, Tag, TripBundle } from '@/domain/types';
+import type { Item, ItemType, Tag, TimeLabel, TripBundle } from '@/domain/types';
 import { TAGS } from '@/domain/types';
+
+const ITEM_TYPES: ItemType[] = [
+  'transport',
+  'transfer',
+  'sight',
+  'meal',
+  'shop',
+  'admin',
+  'reminder',
+  'freeform',
+];
+
+const TIME_LABELS: TimeLabel[] = ['morning', 'afternoon', 'evening'];
+
+const fieldClass =
+  'w-full min-h-[40px] rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600 dark:bg-slate-800';
 
 /** A short word for what kind of thing this is, preferring the actual vehicle. */
 function kindLabel(item: Item): string {
@@ -316,10 +332,171 @@ export function DayTimelinePage() {
   );
 }
 
+/**
+ * Everything correctable without touching the seed file. Travel legs, locations, costs
+ * and opening hours stay out of reach here - they need their own editors, not this one.
+ */
+function ItemEditForm({
+  item,
+  onCancel,
+  onSaved,
+}: {
+  item: Item;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(item.title);
+  const [type, setType] = useState<ItemType>(item.type);
+  // Wall-clock strings, exactly as typed. Never routed through a Date or a timezone.
+  const [time, setTime] = useState(item.time ?? '');
+  const [timeEnd, setTimeEnd] = useState(item.timeEnd ?? '');
+  const [timeLabel, setTimeLabel] = useState<TimeLabel | ''>(item.timeLabel ?? '');
+  const [tags, setTags] = useState<Tag[]>(item.tags);
+  const [notes, setNotes] = useState(item.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const toggleTag = (tag: Tag) => {
+    setTags((current) =>
+      current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag],
+    );
+  };
+
+  const save = async () => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setError('Give it a title.');
+      return;
+    }
+    await itemsRepo.patch(item.id, {
+      title: trimmed,
+      type,
+      time: time === '' ? null : time,
+      timeEnd: timeEnd === '' ? null : timeEnd,
+      // Only meaningful once there is no exact time to show instead.
+      timeLabel: time === '' ? timeLabel || null : null,
+      // The seed marks a time the source notes gave as "~14:00", and the timeline renders
+      // that tilde. A time typed here is exact, so the tilde goes - but only when this edit
+      // actually moved it. Correcting a title must not restate someone else's approximate
+      // time as precise.
+      ...(time !== (item.time ?? '') ? { timeApprox: false } : {}),
+      tags,
+      notes,
+    });
+    onSaved();
+  };
+
+  return (
+    <Card className="mb-4">
+      <div className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Title</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className={fieldClass}
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Type</span>
+          <select
+            value={type}
+            onChange={(event) => setType(event.target.value as ItemType)}
+            className={fieldClass}
+          >
+            {ITEM_TYPES.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex gap-3">
+          <label className="flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Start time</span>
+            <input
+              type="time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+              className={fieldClass}
+            />
+          </label>
+          <label className="flex-1">
+            <span className="mb-1 block text-xs font-medium text-slate-500">End time</span>
+            <input
+              type="time"
+              value={timeEnd}
+              onChange={(event) => setTimeEnd(event.target.value)}
+              className={fieldClass}
+            />
+          </label>
+        </div>
+
+        {time === '' ? (
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Roughly when</span>
+            <select
+              value={timeLabel}
+              onChange={(event) => setTimeLabel(event.target.value as TimeLabel | '')}
+              className={fieldClass}
+            >
+              <option value="">No particular time</option>
+              {TIME_LABELS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        <div>
+          <span className="mb-1 block text-xs font-medium text-slate-500">Tags</span>
+          <div className="flex flex-wrap gap-3">
+            {TAGS.map((tag) => (
+              <label key={tag} className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={tags.includes(tag)}
+                  onChange={() => toggleTag(tag)}
+                />
+                {tag}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Notes</span>
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+          />
+        </label>
+
+        {error ? (
+          <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <Button variant="primary" onClick={() => void save()}>
+            Save
+          </Button>
+          <Button onClick={onCancel}>Cancel</Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function ItemDetailPage() {
   const { tripId, itemId } = useParams();
   const bundle = useTripBundle(tripId);
   const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const item = bundle.items.find((i) => i.id === itemId);
@@ -335,22 +512,38 @@ export function ItemDetailPage() {
       <PageHeader
         title={item.title}
         subtitle={day ? `${formatDayLabel(day.date)} · ${day.city}` : undefined}
-        actions={<Button onClick={() => void navigate(-1)}>Back</Button>}
+        actions={
+          <>
+            {!editing ? <Button onClick={() => setEditing(true)}>Edit</Button> : null}
+            <Button onClick={() => void navigate(-1)}>Back</Button>
+          </>
+        }
       />
 
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {item.tags.map((tag) => (
-          <TagChip key={tag} tag={tag} />
-        ))}
-        <Chip>{item.type}</Chip>
-        {item.status !== 'planned' ? <Chip tone="good">{item.status}</Chip> : null}
-      </div>
+      {editing ? (
+        <ItemEditForm
+          key={item.id}
+          item={item}
+          onCancel={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            {item.tags.map((tag) => (
+              <TagChip key={tag} tag={tag} />
+            ))}
+            <Chip>{item.type}</Chip>
+            {item.status !== 'planned' ? <Chip tone="good">{item.status}</Chip> : null}
+          </div>
 
-      {item.notes ? (
-        <Card className="mb-4">
-          <p className="text-sm">{item.notes}</p>
-        </Card>
-      ) : null}
+          {item.notes ? (
+            <Card className="mb-4">
+              <p className="text-sm">{item.notes}</p>
+            </Card>
+          ) : null}
+        </>
+      )}
 
       {item.travel ? (
         <Section title="The journey">

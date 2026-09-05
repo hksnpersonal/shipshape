@@ -2,7 +2,7 @@
  * Screen-level tests for the two interactions that matter most: stripping a day back to
  * essentials, and clearing something out of the inbox so it stays cleared.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RouterProvider, createMemoryRouter } from 'react-router';
@@ -12,7 +12,7 @@ import { importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
 import { documentsRepo, settingsRepo } from '@/db/repo';
 import { BookingDetailPage } from '@/features/BookingPages';
-import { DayTimelinePage } from '@/features/DayPages';
+import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
 import { DocumentsVaultPage, OBJECT_URL_TTL_MS } from '@/features/DocumentPages';
 import { ConflictInboxPage } from '@/features/InboxPages';
 import { DaysIndexPage, TripHomePage } from '@/features/TripPages';
@@ -32,6 +32,7 @@ function renderAt(path: string) {
           { path: 't/:tripId/days', element: <DaysIndexPage /> },
           { path: 't/:tripId/documents', element: <DocumentsVaultPage /> },
           { path: 't/:tripId/bookings/:bookingId', element: <BookingDetailPage /> },
+          { path: 't/:tripId/items/:itemId', element: <ItemDetailPage /> },
         ],
       },
     ],
@@ -169,6 +170,23 @@ describe('the documents vault', () => {
 
     expect(await screen.findByText('boat-ticket.pdf')).toBeInTheDocument();
     expect(screen.queryByText('Nothing filed yet')).not.toBeInTheDocument();
+    // Filed as a ticket without being asked: the common case should cost nothing.
+    expect(screen.getByText(/^Ticket ·/)).toBeInTheDocument();
+  });
+
+  it('files a document as the kind that was chosen', async () => {
+    renderAt(`/t/${TRIP}/documents`);
+    await screen.findByText('Nothing filed yet');
+
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText('Kind of document'), 'insurance');
+    const file = new File(['policy'], 'policy.pdf', { type: 'application/pdf' });
+    await user.upload(screen.getByLabelText('Add a document'), file);
+
+    expect(await screen.findByText('policy.pdf')).toBeInTheDocument();
+    expect(screen.getByText(/^Insurance ·/)).toBeInTheDocument();
+    const stored = await db.documents.where('tripId').equals(TRIP).toArray();
+    expect(stored[0]?.kind).toBe('insurance');
   });
 
   it('opens a document, and keeps the object URL alive long enough for the tab to load it', async () => {
@@ -238,5 +256,125 @@ describe('filing a document from a booking', () => {
     renderAt(`/t/${TRIP}/documents`);
     expect(await screen.findByText('tgv-ticket.pdf')).toBeInTheDocument();
     expect(screen.getByText(/Filed against TGV Lyria, Basel to Paris/)).toBeInTheDocument();
+  });
+});
+
+describe('editing an item inline', () => {
+  // Runs 15:45 to Roma Termini, arriving 30 minutes into the immigration line that ends
+  // at 15:30. Nothing else on the day is timed to clash, so this pair is the clean way
+  // to manufacture exactly one new finding.
+  const ITEM_ID = `${TRIP}-d01-i03`; // "Leonardo Express to Roma Termini"
+
+  it('edits a title, saves it, and shows and persists the new title', async () => {
+    renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const titleInput = screen.getByDisplayValue('Leonardo Express to Roma Termini');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Leonardo Express to the station');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Leonardo Express to the station' }),
+    ).toBeInTheDocument();
+    expect((await db.items.get(ITEM_ID))?.title).toBe('Leonardo Express to the station');
+  });
+
+  it('clears a time and persists null rather than an empty string', async () => {
+    renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const stored = await db.items.get(ITEM_ID);
+      expect(stored?.time).toBeNull();
+    });
+  });
+
+  it('leaves the item untouched when the edit is cancelled', async () => {
+    const before = await db.items.get(ITEM_ID);
+    renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const titleInput = screen.getByDisplayValue('Leonardo Express to Roma Termini');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Something else entirely');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(
+      screen.getByRole('heading', { name: 'Leonardo Express to Roma Termini' }),
+    ).toBeInTheDocument();
+    expect(await db.items.get(ITEM_ID)).toEqual(before);
+  });
+
+  // The seed marks this one "~15:45" because the source notes were vague about it. The
+  // tilde is rendered on the timeline, so it has to stop being true the moment someone
+  // states the time exactly - and go on being true when they only touched something else.
+  it('stops calling a time approximate once it has been typed exactly', async () => {
+    expect((await db.items.get(ITEM_ID))?.timeApprox).toBe(true);
+
+    renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '15:50' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const stored = await db.items.get(ITEM_ID);
+      expect(stored?.time).toBe('15:50');
+      expect(stored?.timeApprox).toBe(false);
+    });
+  });
+
+  it('leaves an approximate time approximate when only the title is corrected', async () => {
+    renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const titleInput = screen.getByDisplayValue('Leonardo Express to Roma Termini');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'Leonardo Express');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const stored = await db.items.get(ITEM_ID);
+      expect(stored?.title).toBe('Leonardo Express');
+      expect(stored?.timeApprox).toBe(true);
+      expect(stored?.time).toBe('15:45');
+    });
+  });
+
+  it('re-runs the audit the moment an edit creates a collision, reflected in the inbox', async () => {
+    const itemScreen = renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    // Immigration and luggage runs until 15:30. Moving this to 15:00 collides with it.
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '15:00' } });
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      expect((await db.items.get(ITEM_ID))?.time).toBe('15:00');
+    });
+    itemScreen.unmount();
+
+    // A fresh mount of the inbox, not a query against the same live subtree: the point is
+    // that the plan re-checks itself, not that this render happened to already hold it.
+    renderAt(`/t/${TRIP}/conflicts`);
+    expect(
+      await screen.findByText(/Immigration and luggage overlaps Leonardo Express to Roma Termini/),
+    ).toBeInTheDocument();
   });
 });

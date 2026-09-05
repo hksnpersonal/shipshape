@@ -19,17 +19,16 @@ Item 1 below is Phase 0 there.
 
 ## Next, in order
 
-1. **Item editor.** Title, time, notes, tags and type. Today only status and order can
-   change, so a correction means editing the seed file. `itemsRepo.patch` already exists.
-   This is also the first piece of the roadmap's Phase 2 review surface - "easy to change
-   what the plan says" is mechanically this editor plus the linter re-running on each edit.
-2. **Say what kind a document is.** `attach` accepts a `kind` and the vault renders it, but
-   nothing sets one, so every filed document reads "Other". A picker on attach, or a guess
-   from the file name.
-3. **Quick capture for bookings.** A short form to add a booking from a confirmation email,
+1. **Add and delete items.** Now that an item can be corrected, not being able to add or
+   remove one is the obvious hole. `itemsRepo.add` and `itemsRepo.remove` both exist and
+   neither has a way in.
+2. **Quick capture for bookings.** A short form to add a booking from a confirmation email,
    with the guide match shown as you type. `bookingsRepo.add` already exists.
-4. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
+3. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
    the interface sets `bookingId`.
+4. **A way to say a time is approximate.** The editor clears `timeApprox` when someone types
+   an exact time, which is right by default, but there is no way back to "~19:00" short of
+   the seed. A checkbox beside the time would do it.
 
 ## Later
 

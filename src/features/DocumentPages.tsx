@@ -98,11 +98,14 @@ export function AttachDocumentButton({
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // Defaulted rather than asked for. Almost everything filed here is a ticket, and a
+  // required question before the file picker would be one more thing to get through.
+  const [kind, setKind] = useState<DocumentKind>('ticket');
 
   const attach = async (file: File) => {
     setError(null);
     try {
-      await documentsRepo.attach(tripId, file, { name: file.name, attachedTo });
+      await documentsRepo.attach(tripId, file, { name: file.name, kind, attachedTo });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That file could not be attached.');
     }
@@ -110,9 +113,26 @@ export function AttachDocumentButton({
 
   return (
     <>
-      <Button variant="primary" onClick={() => fileInput.current?.click()}>
-        <Upload size={15} aria-hidden /> {label}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="primary" onClick={() => fileInput.current?.click()}>
+          <Upload size={15} aria-hidden /> {label}
+        </Button>
+        <label className="flex items-center gap-1.5 text-sm text-slate-500">
+          as
+          <select
+            aria-label="Kind of document"
+            value={kind}
+            onChange={(event) => setKind(event.target.value as DocumentKind)}
+            className="min-h-[36px] rounded-lg border border-slate-300 px-2 text-sm dark:border-slate-600 dark:bg-slate-800"
+          >
+            {(Object.keys(KIND_WORDS) as DocumentKind[]).map((option) => (
+              <option key={option} value={option}>
+                {KIND_WORDS[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <input
         ref={fileInput}
         type="file"
