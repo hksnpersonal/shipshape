@@ -21,16 +21,11 @@ Item 1 below is Phase 0 there.
 
 ## Next, in order
 
-1. **Add and delete items.** Now that an item can be corrected, not being able to add or
-   remove one is the obvious hole. `itemsRepo.add` and `itemsRepo.remove` both exist and
-   neither has a way in.
-2. **Quick capture for bookings.** A short form to add a booking from a confirmation email,
-   with the guide match shown as you type. `bookingsRepo.add` already exists.
-3. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
+1. **Quick capture for bookings.** A short form to add a booking from a confirmation email,
+   with the guide match shown as you type. `bookingsRepo.add` already exists. This is the
+   one that matters before departure - there are still things to book.
+2. **Attach a booking to an item, and unlink it.** The data model supports it; nothing in
    the interface sets `bookingId`.
-4. **A way to say a time is approximate.** The editor clears `timeApprox` when someone types
-   an exact time, which is right by default, but there is no way back to "~19:00" short of
-   the seed. A checkbox beside the time would do it.
 
 ## Later
 

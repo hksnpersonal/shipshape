@@ -336,6 +336,28 @@ describe('editing an item inline', () => {
     });
   });
 
+  it('can put the tilde back, so an exact time is not a one-way door', async () => {
+    renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
+    await screen.findByText('Leonardo Express to Roma Termini');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const approx = screen.getByLabelText('Around this time, not exactly');
+    expect(approx).toBeChecked();
+
+    // Typing a time clears it, and the box is right there to say otherwise.
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '16:05' } });
+    expect(approx).not.toBeChecked();
+    await user.click(approx);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const stored = await db.items.get(ITEM_ID);
+      expect(stored?.time).toBe('16:05');
+      expect(stored?.timeApprox).toBe(true);
+    });
+  });
+
   it('leaves an approximate time approximate when only the title is corrected', async () => {
     renderAt(`/t/${TRIP}/items/${ITEM_ID}`);
     await screen.findByText('Leonardo Express to Roma Termini');

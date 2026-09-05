@@ -444,6 +444,7 @@ function ItemEditForm({
   const [time, setTime] = useState(item.time ?? '');
   const [timeEnd, setTimeEnd] = useState(item.timeEnd ?? '');
   const [timeLabel, setTimeLabel] = useState<TimeLabel | ''>(item.timeLabel ?? '');
+  const [approx, setApprox] = useState(item.timeApprox ?? false);
   const [tags, setTags] = useState<Tag[]>(item.tags);
   const [notes, setNotes] = useState(item.notes ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -475,10 +476,9 @@ function ItemEditForm({
       // Only meaningful once there is no exact time to show instead.
       timeLabel: time === '' ? timeLabel || null : null,
       // The seed marks a time the source notes gave as "~14:00", and the timeline renders
-      // that tilde. A time typed here is exact, so the tilde goes - but only when this edit
-      // actually moved it. Correcting a title must not restate someone else's approximate
-      // time as precise.
-      ...(time !== (item.time ?? '') ? { timeApprox: false } : {}),
+      // that tilde. The checkbox governs it now; with no time there is nothing to be
+      // approximate about.
+      timeApprox: time === '' ? false : approx,
       tags,
       notes,
     });
@@ -518,7 +518,13 @@ function ItemEditForm({
             <input
               type="time"
               value={time}
-              onChange={(event) => setTime(event.target.value)}
+              onChange={(event) => {
+                setTime(event.target.value);
+                // A time someone has just typed is an exact one. The checkbox below is
+                // right there to say otherwise, so this is a visible default, not a
+                // silent rewrite of what they meant.
+                setApprox(false);
+              }}
               className={fieldClass}
             />
           </label>
@@ -532,6 +538,13 @@ function ItemEditForm({
             />
           </label>
         </div>
+
+        {time !== '' ? (
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={approx} onChange={() => setApprox(!approx)} />
+            Around this time, not exactly
+          </label>
+        ) : null}
 
         {time === '' ? (
           <label className="block">
