@@ -394,17 +394,18 @@ const i04: Item[] = buildItems('d04', [
     title: 'Frecciarossa to Florence',
     type: 'transport',
     time: '08:35',
-    timeEnd: '10:00',
+    timeEnd: '10:11',
     bookingId: BK.frecciarossaRomFlr,
     pinnedToDate: true,
     travel: {
       mode: 'train',
       from: PLACES.romaTermini,
       to: PLACES.firenzeSmn,
-      durationMins: 85,
+      durationMins: 96,
       operator: 'Trenitalia',
     },
-    notes: 'The notes label this 1 h 36 m; the booked times are 1 h 25.',
+    notes:
+      'The ticket confirms 08:35 to 10:11, the 1 h 36 m the notes gave. Frecciarossa 9490, no changes or refunds.',
   },
   {
     title: 'Walk to the hotel and store luggage',
@@ -654,8 +655,8 @@ const i06: Item[] = buildItems('d06', [
   {
     title: 'Italo to Venice',
     type: 'transport',
-    time: '08:30',
-    timeEnd: '11:00',
+    time: '08:39',
+    timeEnd: '10:55',
     bookingId: BK.italoFlrVce,
     pinnedToDate: true,
     travel: {

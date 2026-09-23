@@ -111,6 +111,15 @@ export const BK = {
   gondolaVenice: 'bk-att-gondola',
   canalCruise: 'bk-att-canal-cruise',
   amsterdamCityCard: 'bk-card-amsterdam',
+  // Hotels
+  hotelRome: 'bk-hotel-rome',
+  hotelFlorence: 'bk-hotel-florence',
+  hotelVenice: 'bk-hotel-venice',
+  hotelMilan: 'bk-hotel-milan',
+  hotelLucerne: 'bk-hotel-lucerne',
+  hotelGrindelwald: 'bk-hotel-grindelwald',
+  hotelParis: 'bk-hotel-paris',
+  hotelAmsterdam: 'bk-hotel-amsterdam',
   // Restaurants
   roscioli: 'bk-rest-roscioli',
   daFabrizio: 'bk-rest-da-fabrizio',
@@ -339,6 +348,7 @@ export const PLACES = {
     city: 'Florence',
     zone: 'florence-centro',
     countryCode: IT,
+    address: "Via Sant'Antonino 7, 50123 Firenze",
   }),
   deNeri: place('it-florence-de-neri', {
     name: "Panetteria e Stuzzicheria De' Neri 18R",
@@ -801,7 +811,7 @@ export const PLACES = {
     countryCode: CH,
   }),
   hotelCentralWalter: place('ch-grindelwald-hotel-central-walter', {
-    name: 'Hotel Central Walter',
+    name: 'Hotel Central Wolter',
     kind: 'hotel',
     city: 'Grindelwald',
     countryCode: CH,

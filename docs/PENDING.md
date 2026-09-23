@@ -9,6 +9,15 @@ Item 1 below is Phase 0 there.
 
 ## Blocked on the user
 
+- **Put it on both phones (before 25 September).** Build with a root base path from
+  PowerShell, not Git Bash, which rewrites `/` into `C:/Program Files/Git/`:
+  `$env:VITE_BASE='/'; npm run build`. Drag `dist` onto app.netlify.com/drop and claim the
+  site. `public/_redirects` handles deep links. Then on each phone open the URL, add it to
+  the home screen, and import `Europe 2026.shipshape.json` from Settings.
+- **Regenerating the private file** after changing the seed or the overlay:
+  `node scripts/make-private-trip.mjs "<Europe Trips>\shipshape-private.json" "<Europe Trips>\Europe 2026.shipshape.json"`.
+  Importing it again replaces the trip on the phone, including any edits made there.
+
 - **Publish it.** No GitHub remote and no `gh` on this machine. Either
   `winget install GitHub.cli` then `gh repo create`, or create the repository on github.com
   and `git remote add origin`. **Name the repository `shipshape`**: `deploy.yml` reads the

@@ -40,7 +40,16 @@ import { itemLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
 import type { DaySwapPlan } from '@/domain/swap';
-import type { Booking, ID, Item, ItemType, Tag, TimeLabel, TripBundle } from '@/domain/types';
+import type {
+  Booking,
+  ID,
+  Item,
+  ItemType,
+  Passenger,
+  Tag,
+  TimeLabel,
+  TripBundle,
+} from '@/domain/types';
 import { TAGS } from '@/domain/types';
 
 const ITEM_TYPES: ItemType[] = [
@@ -73,6 +82,32 @@ function kindLabel(item: Item): string {
     freeform: '',
   };
   return words[item.type];
+}
+
+/**
+ * "Coach 5 · Seats 73, 74" for the item's travel card - one line, coaches collapsed so a
+ * party sitting together does not repeat itself.
+ */
+function passengerSeatSummary(passengers: Passenger[]): string | null {
+  const withSeats = passengers.filter((p) => p.seat || p.coach);
+  if (withSeats.length === 0) return null;
+
+  const seatsByCoach = new Map<string, string[]>();
+  for (const p of withSeats) {
+    const coach = p.coach ?? '';
+    const seats = seatsByCoach.get(coach) ?? [];
+    if (p.seat) seats.push(p.seat);
+    seatsByCoach.set(coach, seats);
+  }
+
+  return [...seatsByCoach.entries()]
+    .map(([coach, seats]) => {
+      const seatPart =
+        seats.length > 0 ? `${seats.length > 1 ? 'Seats' : 'Seat'} ${seats.join(', ')}` : '';
+      if (coach && seatPart) return `Coach ${coach} · ${seatPart}`;
+      return coach ? `Coach ${coach}` : seatPart;
+    })
+    .join('; ');
 }
 
 function ItemRow({
@@ -640,6 +675,7 @@ export function ItemDetailPage() {
   const booking = bookingOf(bundle, item);
   const guide = matchGuides(item, allGuides)[0]?.guide;
   const links = itemLinks(item, day?.date, booking, guide);
+  const seatSummary = booking?.passengers ? passengerSeatSummary(booking.passengers) : null;
 
   return (
     <>
@@ -691,6 +727,7 @@ export function ItemDetailPage() {
               {item.travel.operator ? ` with ${item.travel.operator}` : ''}
               {item.travel.durationMins ? `, about ${item.travel.durationMins} minutes` : ''}
             </p>
+            {seatSummary ? <p className="text-sm text-slate-500">{seatSummary}</p> : null}
             {item.travel.seatSide ? (
               <p className="text-brand-700 dark:text-brand-300 mt-1 text-sm font-medium">
                 Sit on the {item.travel.seatSide}

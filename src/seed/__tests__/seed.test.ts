@@ -77,9 +77,10 @@ describe('the Europe 2026 sample trip', () => {
 });
 
 describe('the conflicts the traveller found by hand', () => {
-  it('#1 the trip end date disagrees with the flight home', () => {
-    // The header said 18 October; the flight is the 17th.
-    expect(rulesFired.has('trip-range')).toBe(true);
+  it('#1 the trip end date matches the flight home once it carries its arrival', () => {
+    // The header said 18 October and the flight leaves on the 17th. The ticket settles it:
+    // it lands in Sydney on the 18th, so the range is home-to-home and nothing fires.
+    expect(rulesFired.has('trip-range')).toBe(false);
   });
 
   it('#2 the original day numbering is recorded rather than lost', () => {
@@ -176,7 +177,7 @@ describe('what the traveller sees on 4 September 2026', () => {
     );
     expect(outstanding.length).toBeGreaterThan(0);
     // Everything already ticketed is out of the queue.
-    expect(outstanding.every((e) => e.booking.status === 'to_book')).toBe(true);
+    expect(outstanding.some((e) => ['booked', 'confirmed'].includes(e.booking.status))).toBe(false);
   });
 
   it('finds real problems rather than a wall of noise', () => {

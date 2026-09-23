@@ -200,6 +200,15 @@ export interface BookWindow {
   note?: string;
 }
 
+/** Per-person seat, coach and ticket number. One entry per traveller named on the ticket. */
+export interface Passenger {
+  name: string;
+  seat?: string;
+  coach?: string;
+  ticketNumber?: string;
+  note?: string;
+}
+
 export interface Booking {
   id: ID;
   tripId: ID;
@@ -230,6 +239,8 @@ export interface Booking {
   countryCode?: CountryCode;
   url?: string;
   notes?: string;
+  /** Per-person seat, coach and ticket number. One entry per traveller named on the ticket. */
+  passengers?: Passenger[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -326,6 +337,15 @@ export interface SwapGroup {
   rule?: string;
 }
 
+/** A phone number, link or fact worth reaching from the trip home without hunting for it. */
+export interface Essential {
+  id: ID;
+  label: string;
+  value: string;
+  kind: 'phone' | 'text' | 'url';
+  note?: string;
+}
+
 export interface Trip {
   id: ID;
   name: string;
@@ -343,6 +363,10 @@ export interface Trip {
   countries: CountryCode[];
   passes: TravelPass[];
   swapGroups?: SwapGroup[];
+  /** Who is travelling, shown under the trip name. */
+  travellerNames?: string[];
+  /** Numbers, links and facts worth reaching from the trip home, e.g. embassy or insurer. */
+  essentials?: Essential[];
   sourceNote?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

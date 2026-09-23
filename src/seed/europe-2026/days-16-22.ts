@@ -64,12 +64,12 @@ const i16: Item[] = buildItems('d16', [
       passId: PASS_SWISS,
     },
     notes:
-      'The notes give two hours and then about thirty minutes of waiting before the TGV. Verify the exact connection: the TGV is non-refundable.',
+      'The notes give two hours and then about thirty minutes before the 12:34 TGV. Verify the exact connection. The TGV can be exchanged, but only for a fee this close to departure.',
   },
   {
     title: 'TGV Lyria to Paris',
     type: 'transport',
-    time: '12:37',
+    time: '12:34',
     timeEnd: '15:40',
     bookingId: BK.tgvBslPar,
     pinnedToDate: true,
@@ -411,19 +411,19 @@ const i19: Item[] = buildItems('d19', [
   {
     title: 'Train back to Paris',
     type: 'transport',
-    time: '17:15',
-    timeEnd: '19:00',
+    time: '13:13',
+    timeEnd: '14:35',
     bookingId: BK.eurostarBruPar,
-    tags: ['CHECK'],
+    tags: ['CONFLICT'],
     travel: {
       mode: 'train',
       from: PLACES.brusselsMidi,
       to: PLACES.parisGareDuNord,
-      durationMins: 85,
+      durationMins: 82,
       operator: 'Eurostar',
     },
     notes:
-      'The notes give a 17:15 return arriving about 19:00 but only ever mention one Eurostar booking for the day. Confirm whether the return is booked.',
+      'The ticket is for the 13:13, arriving 14:35. The notes planned a 17:15 return, so the afternoon route above no longer fits. Either trim Brussels to the morning or change the ticket - Eurostar allows changes for the fare difference.',
   },
   { title: 'Dinner, then back to the hotel', type: 'meal' },
   { title: "Buy food for tomorrow's train ride", type: 'shop', tags: ['MUST'] },
@@ -466,7 +466,7 @@ const i20: Item[] = buildItems('d20', [
   {
     title: 'Eurostar to Amsterdam Centraal',
     type: 'transport',
-    time: '09:24',
+    time: '09:20',
     timeEnd: '12:50',
     bookingId: BK.eurostarParAms,
     pinnedToDate: true,

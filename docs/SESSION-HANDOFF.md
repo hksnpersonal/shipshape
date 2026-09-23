@@ -1,5 +1,14 @@
 # Session handoff - Shipshape - 2026-09-24
 
+> **Correction, 2026-09-24 (later session).** The trip departs **25 September 2026**
+> (Sydney 21:05, TK175), not 9 October. The end date of 18 October is correct: the flight
+> home lands in Sydney on the 18th, so `trip-range` no longer fires. The seed was
+> reconciled against every ticket in `Europe Trips\Trip Details`. References, seats,
+> ticket numbers and all 32 documents live in the private overlay
+> `Europe Trips\shipshape-private.json`, merged by `scripts/make-private-trip.mjs` into
+> `Europe Trips\Europe 2026.shipshape.json` for import on each phone. Never move them
+> into the seed: the seed ships inside the public site. See `docs/PENDING.md`.
+
 ## Where things stand
 
 **Phase 0 of `docs/ROADMAP.md` is complete.** Everything in the original brief is

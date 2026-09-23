@@ -5,14 +5,15 @@
  * what do I have to book this week, and what is wrong with the plan. It answers them in
  * numbers you can tap rather than sentences you have to read.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { BookOpen, Bell, CalendarDays, FolderOpen, Map, Sunrise } from 'lucide-react';
+import { BookOpen, Bell, CalendarDays, Check, Copy, FolderOpen, Map, Sunrise } from 'lucide-react';
 import {
   Button,
   Chip,
   EmptyState,
   LinkCard,
+  OutLink,
   PageHeader,
   Row,
   Section,
@@ -23,6 +24,7 @@ import { itemsForDay, orderedDays } from '@/domain/bundle';
 import { daysBetween, formatDayLabel } from '@/domain/time';
 import { useAudit, useBookBy, useToday, useTripBundle, useTrips } from '@/hooks/useTrip';
 import type { BookByEntry } from '@/playbook/bookBy';
+import type { Essential } from '@/domain/types';
 
 export function TripsListPage() {
   const trips = useTrips();
@@ -100,6 +102,57 @@ function SideRooms({ tripId, reminders }: { tripId: string; reminders: number })
   );
 }
 
+/** The one thing to do with an essential: call it, open it, or copy it to send on. */
+function EssentialAction({ essential }: { essential: Essential }) {
+  const [copied, setCopied] = useState(false);
+
+  if (essential.kind === 'phone') {
+    return (
+      <a
+        href={`tel:${essential.value.replace(/\s+/g, '')}`}
+        className="text-brand-700 hover:bg-brand-50 dark:text-brand-200 inline-flex min-h-[36px] items-center rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600 dark:hover:bg-slate-700"
+      >
+        Call
+      </a>
+    );
+  }
+
+  if (essential.kind === 'url') {
+    return <OutLink href={essential.value}>Open</OutLink>;
+  }
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(essential.value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <Button onClick={() => void copy()}>
+      {copied ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}
+      {copied ? 'Copied' : 'Copy'}
+    </Button>
+  );
+}
+
+/** Numbers, links and facts worth reaching without hunting through notes for them. */
+function EssentialsCard({ essentials }: { essentials: Essential[] }) {
+  return (
+    <Section title="Essentials">
+      <div className="space-y-2">
+        {essentials.map((essential) => (
+          <Row
+            key={essential.id}
+            title={essential.label}
+            meta={essential.note ?? essential.value}
+            trailing={<EssentialAction essential={essential} />}
+          />
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 export function TripHomePage() {
   const { tripId } = useParams();
   const bundle = useTripBundle(tripId);
@@ -134,6 +187,12 @@ export function TripHomePage() {
               : `Day ${1 - daysAway}`
         }
       />
+
+      {trip.travellerNames?.length ? (
+        <p className="-mt-3 mb-4 text-sm text-slate-500 dark:text-slate-400">
+          {trip.travellerNames.join(', ')}
+        </p>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-3 gap-3">
         <StatTile
@@ -218,6 +277,8 @@ export function TripHomePage() {
           </div>
         </Section>
       ) : null}
+
+      {trip.essentials?.length ? <EssentialsCard essentials={trip.essentials} /> : null}
 
       <SideRooms tripId={trip.id} reminders={pendingReminders} />
     </>

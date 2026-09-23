@@ -290,4 +290,23 @@ describe('schemas', () => {
     });
     expect(validateBundleIntegrity(bad).join(' ')).toContain('no travel leg');
   });
+
+  it('accepts passengers on a booking and essentials on a trip, and still accepts a bundle without them', () => {
+    const withExtras = makeBundle({
+      ...validBundle,
+      trip: makeTrip({
+        travellerNames: ['Alex Henson', 'Sam Henson'],
+        essentials: [{ id: 'ess-1', label: 'Embassy', value: '+61 2 6261 9111', kind: 'phone' }],
+      }),
+      bookings: [
+        makeBooking({
+          date: '2026-09-26',
+          passengers: [{ name: 'Alex Henson', coach: '5', seat: '74' }],
+        }),
+      ],
+    });
+    expect(TripBundleSchema.safeParse(withExtras).success).toBe(true);
+    // Old files never wrote either field, and still parse - both are additive.
+    expect(TripBundleSchema.safeParse(validBundle).success).toBe(true);
+  });
 });

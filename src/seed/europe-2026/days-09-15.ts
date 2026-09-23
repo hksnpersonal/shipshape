@@ -483,7 +483,7 @@ const i12: Item[] = buildItems('d12', [
     },
   },
   {
-    title: 'Walk to Hotel Central Walter and leave luggage',
+    title: 'Walk to Hotel Central Wolter and leave luggage',
     type: 'admin',
     time: '10:45',
     durationMins: 3,

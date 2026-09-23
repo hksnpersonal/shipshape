@@ -136,11 +136,12 @@ export function AttachDocumentButton({
       <input
         ref={fileInput}
         type="file"
+        multiple
         aria-label={label}
         className="hidden"
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) void attach(file);
+          const files = event.target.files;
+          if (files) for (const file of Array.from(files)) void attach(file);
           event.target.value = '';
         }}
       />

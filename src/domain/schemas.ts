@@ -188,6 +188,14 @@ export const BookWindowSchema = z.object({
   note: z.string().optional(),
 });
 
+export const PassengerSchema = z.object({
+  name: z.string().min(1),
+  seat: z.string().optional(),
+  coach: z.string().optional(),
+  ticketNumber: z.string().optional(),
+  note: z.string().optional(),
+});
+
 export const BookingSchema = z.object({
   id: z.string().min(1),
   tripId: z.string().min(1),
@@ -212,6 +220,7 @@ export const BookingSchema = z.object({
   countryCode: z.string().optional(),
   url: z.string().optional(),
   notes: z.string().optional(),
+  passengers: z.array(PassengerSchema).optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });
@@ -289,6 +298,14 @@ export const SwapGroupSchema = z.object({
   rule: z.string().optional(),
 });
 
+export const EssentialSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  value: z.string().min(1),
+  kind: z.enum(['phone', 'text', 'url']),
+  note: z.string().optional(),
+});
+
 export const TripSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -303,6 +320,8 @@ export const TripSchema = z.object({
   countries: z.array(z.string()),
   passes: z.array(TravelPassSchema),
   swapGroups: z.array(SwapGroupSchema).optional(),
+  travellerNames: z.array(z.string()).optional(),
+  essentials: z.array(EssentialSchema).optional(),
   sourceNote: z.string().optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,

@@ -108,6 +108,32 @@ describe('import and export', () => {
     expect(copy?.items.every((i) => i.tripId === first.tripId)).toBe(true);
   });
 
+  it('keeps a booking’s passengers and a trip’s essentials through a round trip', async () => {
+    await importTrip(europe2026, { mode: 'replace' });
+    await bookingsRepo.patch('bk-rail-bsl-par', {
+      passengers: [{ name: 'Alex Henson', coach: '5', seat: '74', ticketNumber: 'TGV-9921' }],
+    });
+    await tripsRepo.patch(TRIP_ID, {
+      travellerNames: ['Alex Henson', 'Sam Henson'],
+      essentials: [
+        { id: 'ess-1', label: 'Travel insurer', value: '+61 2 5550 1234', kind: 'phone' },
+      ],
+    });
+
+    const exported = await exportTrip(TRIP_ID, { includeDocuments: false });
+    await tripsRepo.remove(TRIP_ID);
+    await importTrip(exported, { mode: 'replace' });
+
+    const restored = await loadTripBundle(TRIP_ID);
+    expect(restored?.bookings.find((b) => b.id === 'bk-rail-bsl-par')?.passengers).toEqual([
+      { name: 'Alex Henson', coach: '5', seat: '74', ticketNumber: 'TGV-9921' },
+    ]);
+    expect(restored?.trip.travellerNames).toEqual(['Alex Henson', 'Sam Henson']);
+    expect(restored?.trip.essentials).toEqual([
+      { id: 'ess-1', label: 'Travel insurer', value: '+61 2 5550 1234', kind: 'phone' },
+    ]);
+  });
+
   it('never puts an API key in an export', async () => {
     await importTrip(europe2026, { mode: 'replace' });
     await db.settings.put({

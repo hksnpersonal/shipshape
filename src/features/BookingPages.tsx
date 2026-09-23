@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ExternalLink, Plus } from 'lucide-react';
+import { ExternalLink, Plus, X } from 'lucide-react';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   PageHeader,
   Section,
 } from '@/components/ui';
+import { cn } from '@/lib/cn';
 import { bookingsRepo } from '@/db/repo';
 import { itemsOfBooking } from '@/domain/bundle';
 import { formatDayLabel } from '@/domain/time';
@@ -27,7 +28,7 @@ import { bookingLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { bookBy } from '@/playbook/bookBy';
 import { useBookBy, useDocumentsFor, useToday, useTripBundle } from '@/hooks/useTrip';
-import type { Booking, BookingKind, BookingStatus, ID } from '@/domain/types';
+import type { Booking, BookingKind, BookingStatus, ID, Passenger } from '@/domain/types';
 import type { BookByEntry } from '@/playbook/bookBy';
 
 const STATUS_WORDS: Record<BookingStatus, string> = {
@@ -67,6 +68,14 @@ const BOOKING_STATUSES: BookingStatus[] = [
 
 const fieldClass =
   'w-full min-h-[40px] rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600 dark:bg-slate-800';
+
+/** "Coach 5 · Seat 74", falling back to whichever half is actually known. */
+function passengerSeatLine(passenger: Passenger): string | null {
+  if (passenger.coach && passenger.seat) return `Coach ${passenger.coach} · Seat ${passenger.seat}`;
+  if (passenger.coach) return `Coach ${passenger.coach}`;
+  if (passenger.seat) return `Seat ${passenger.seat}`;
+  return null;
+}
 
 function statusTone(status: BookingStatus) {
   if (status === 'to_book') return 'warn' as const;
@@ -342,7 +351,14 @@ function BookingEditForm({
   const [status, setStatus] = useState<BookingStatus>(booking.status);
   const [reference, setReference] = useState(booking.reference ?? '');
   const [notes, setNotes] = useState(booking.notes ?? '');
+  const [passengers, setPassengers] = useState<Passenger[]>(booking.passengers ?? []);
   const [error, setError] = useState<string | null>(null);
+
+  const addPassenger = () => setPassengers((current) => [...current, { name: '' }]);
+  const removePassenger = (index: number) =>
+    setPassengers((current) => current.filter((_, i) => i !== index));
+  const updatePassenger = (index: number, patch: Partial<Passenger>) =>
+    setPassengers((current) => current.map((p, i) => (i === index ? { ...p, ...patch } : p)));
 
   // Removing unlinks every item that pointed here and leaves documents alone - the
   // traveller needs to know that before confirming, not discover it afterwards.
@@ -368,6 +384,18 @@ function BookingEditForm({
       setError('Give it a date.');
       return;
     }
+    // A row someone started and abandoned - name still blank - is dropped rather than
+    // blocking the whole save. Everything else about a passenger is optional, so trimming
+    // is the only cleanup a kept row needs.
+    const cleanedPassengers: Passenger[] = passengers
+      .map((p) => ({
+        name: p.name.trim(),
+        ...(p.seat?.trim() ? { seat: p.seat.trim() } : {}),
+        ...(p.coach?.trim() ? { coach: p.coach.trim() } : {}),
+        ...(p.ticketNumber?.trim() ? { ticketNumber: p.ticketNumber.trim() } : {}),
+        ...(p.note?.trim() ? { note: p.note.trim() } : {}),
+      }))
+      .filter((p) => p.name !== '');
     await bookingsRepo.patch(booking.id, {
       title: trimmedTitle,
       date,
@@ -377,6 +405,7 @@ function BookingEditForm({
       // handed undefined, so clearing the field this way could leave the old value behind.
       reference,
       notes,
+      passengers: cleanedPassengers,
     });
     onSaved();
   };
@@ -454,6 +483,65 @@ function BookingEditForm({
           />
         </label>
 
+        <div>
+          <span className="mb-1 block text-xs font-medium text-slate-500">Passengers</span>
+          <div className="space-y-2">
+            {passengers.map((passenger, index) => (
+              <div
+                key={index}
+                className="rounded-lg border border-slate-200 p-3 dark:border-slate-600"
+              >
+                <div className="flex gap-2">
+                  <input
+                    value={passenger.name}
+                    onChange={(event) => updatePassenger(index, { name: event.target.value })}
+                    placeholder="Name"
+                    aria-label="Passenger name"
+                    className={fieldClass}
+                  />
+                  <Button variant="ghost" onClick={() => removePassenger(index)}>
+                    <X size={15} aria-hidden />
+                    <span className="sr-only">Remove passenger</span>
+                  </Button>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={passenger.coach ?? ''}
+                    onChange={(event) => updatePassenger(index, { coach: event.target.value })}
+                    placeholder="Coach"
+                    aria-label="Coach"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={passenger.seat ?? ''}
+                    onChange={(event) => updatePassenger(index, { seat: event.target.value })}
+                    placeholder="Seat"
+                    aria-label="Seat"
+                    className={fieldClass}
+                  />
+                </div>
+                <input
+                  value={passenger.ticketNumber ?? ''}
+                  onChange={(event) => updatePassenger(index, { ticketNumber: event.target.value })}
+                  placeholder="Ticket number"
+                  aria-label="Ticket number"
+                  className={cn(fieldClass, 'mt-2')}
+                />
+                <input
+                  value={passenger.note ?? ''}
+                  onChange={(event) => updatePassenger(index, { note: event.target.value })}
+                  placeholder="Note"
+                  aria-label="Passenger note"
+                  className={cn(fieldClass, 'mt-2')}
+                />
+              </div>
+            ))}
+          </div>
+          <Button className="mt-2" onClick={addPassenger}>
+            <Plus size={15} aria-hidden /> Add passenger
+          </Button>
+        </div>
+
         {error ? (
           <p className="text-sm font-medium text-rose-700 dark:text-rose-300">{error}</p>
         ) : null}
@@ -470,6 +558,33 @@ function BookingEditForm({
         </div>
       </div>
     </Card>
+  );
+}
+
+/** One row per traveller named on the ticket, compact enough to sit above the fold. */
+function PassengersCard({ passengers }: { passengers: Passenger[] }) {
+  return (
+    <Section title="Passengers">
+      <Card>
+        <div className="divide-y divide-slate-100 dark:divide-slate-700">
+          {passengers.map((passenger, index) => {
+            const seatLine = passengerSeatLine(passenger);
+            return (
+              <div key={index} className={index > 0 ? 'pt-2' : undefined}>
+                <p className="font-medium">{passenger.name}</p>
+                {seatLine ? <p className="text-sm text-slate-500">{seatLine}</p> : null}
+                {passenger.ticketNumber ? (
+                  <p className="font-mono text-xs text-slate-400">{passenger.ticketNumber}</p>
+                ) : null}
+                {passenger.note ? (
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{passenger.note}</p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </Section>
   );
 }
 
@@ -542,6 +657,8 @@ export function BookingDetailPage() {
           ) : null}
         </Card>
       )}
+
+      {booking.passengers?.length ? <PassengersCard passengers={booking.passengers} /> : null}
 
       <Section title="Documents">
         <div className="mb-2">

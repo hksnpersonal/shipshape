@@ -10,7 +10,7 @@ import { AppShell } from '@/app/AppShell';
 import { db } from '@/db/db';
 import { importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
-import { documentsRepo, settingsRepo } from '@/db/repo';
+import { bookingsRepo, documentsRepo, settingsRepo, tripsRepo } from '@/db/repo';
 import { BookingDetailPage, BookingsBoardPage } from '@/features/BookingPages';
 import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
 import { DocumentsVaultPage, OBJECT_URL_TTL_MS } from '@/features/DocumentPages';
@@ -711,6 +711,38 @@ describe('editing a booking', () => {
 
     expect(screen.getByRole('heading', { name: 'TGV Lyria, Basel to Paris' })).toBeInTheDocument();
     expect(await db.bookings.get(BOOKING_ID)).toEqual(before);
+  });
+});
+
+describe('passengers on a booking', () => {
+  const BOOKING_ID = 'bk-rail-bsl-par'; // "TGV Lyria, Basel to Paris"
+
+  it('shows a passenger’s coach and seat on the booking detail', async () => {
+    await bookingsRepo.patch(BOOKING_ID, {
+      passengers: [{ name: 'Alex Henson', coach: '5', seat: '74' }],
+    });
+
+    renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
+    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+
+    expect(screen.getByText('Alex Henson')).toBeInTheDocument();
+    expect(screen.getByText('Coach 5 · Seat 74')).toBeInTheDocument();
+  });
+});
+
+describe('trip essentials', () => {
+  it('renders a tel: link for a phone essential on the trip home', async () => {
+    await tripsRepo.patch(TRIP, {
+      essentials: [
+        { id: 'ess-1', label: 'Travel insurer', value: '+61 2 5550 1234', kind: 'phone' },
+      ],
+    });
+
+    renderAt(`/t/${TRIP}`);
+    await screen.findByText('Travel insurer');
+
+    const call = screen.getByRole('link', { name: 'Call' });
+    expect(call).toHaveAttribute('href', 'tel:+61255501234');
   });
 });
 
