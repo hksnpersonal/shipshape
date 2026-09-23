@@ -6,8 +6,26 @@
  */
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { Check, Download, EyeOff, RotateCcw, Upload } from 'lucide-react';
-import { Button, Card, Chip, EmptyState, PageHeader, Section, SeverityChip } from '@/components/ui';
+import {
+  CalendarDays,
+  Check,
+  Download,
+  EyeOff,
+  ListChecks,
+  RotateCcw,
+  Ticket,
+  Upload,
+} from 'lucide-react';
+import {
+  Button,
+  Card,
+  Chip,
+  Disclosure,
+  EmptyState,
+  PageHeader,
+  Section,
+  SeverityChip,
+} from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { europe2026 } from '@/seed/europe-2026';
 import { findingsRepo, listTrips, remindersRepo, settingsRepo } from '@/db/repo';
@@ -30,9 +48,9 @@ export function ConflictInboxPage() {
     : audit.actionable;
   const order: Array<ResolvedFinding['severity']> = ['error', 'warning', 'info'];
   const HEADINGS: Record<ResolvedFinding['severity'], string> = {
-    error: 'Cannot happen as planned',
-    warning: 'Worth checking before you go',
-    info: 'Things the app noticed',
+    error: 'Blocked',
+    warning: 'Check',
+    info: 'Noted',
   };
   const grouped = order
     .map((severity) => ({ severity, items: visible.filter((f) => f.severity === severity) }))
@@ -46,24 +64,42 @@ export function ConflictInboxPage() {
   return (
     <>
       <PageHeader
-        title="What needs deciding"
-        subtitle={
-          showResolved
-            ? `${audit.counts.resolved} already dealt with`
-            : `${audit.counts.error} cannot happen as planned, ${audit.counts.warning} worth checking`
-        }
+        title="Inbox"
         actions={
-          <Button onClick={() => setShowResolved(!showResolved)}>
-            {showResolved ? 'Show open' : 'Show cleared'}
-          </Button>
+          <div
+            className="flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600"
+            role="group"
+            aria-label="Which findings to show"
+          >
+            {(
+              [
+                { key: false, label: 'Open', count: audit.counts.actionable },
+                { key: true, label: 'Cleared', count: audit.counts.resolved },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.label}
+                type="button"
+                aria-pressed={showResolved === tab.key}
+                onClick={() => setShowResolved(tab.key)}
+                className={cn(
+                  'min-h-[40px] px-3 text-sm font-medium',
+                  showResolved === tab.key
+                    ? 'bg-brand-600 text-white'
+                    : 'text-slate-600 dark:text-slate-300',
+                )}
+              >
+                {tab.label}
+                <span className="ml-1.5 tabular-nums opacity-70">{tab.count}</span>
+              </button>
+            ))}
+          </div>
         }
       />
 
       {visible.length === 0 ? (
         <EmptyState title={showResolved ? 'Nothing cleared yet.' : 'Nothing outstanding.'}>
-          {showResolved
-            ? 'Findings you resolve or dismiss will collect here.'
-            : 'The audit found nothing wrong with the plan as it stands.'}
+          {showResolved ? undefined : 'The plan checks out as it stands.'}
         </EmptyState>
       ) : (
         grouped.map((group) => (
@@ -92,28 +128,25 @@ export function ConflictInboxPage() {
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {finding.dayId ? (
-                      <Link
+                      <JumpLink
                         to={`/t/${bundle.trip.id}/days/${finding.dayId}`}
-                        className="inline-flex min-h-[36px] items-center rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600"
-                      >
-                        Open the day
-                      </Link>
+                        icon={CalendarDays}
+                        label="Day"
+                      />
                     ) : null}
                     {finding.itemIds[0] ? (
-                      <Link
+                      <JumpLink
                         to={`/t/${bundle.trip.id}/items/${finding.itemIds[0]}`}
-                        className="inline-flex min-h-[36px] items-center rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600"
-                      >
-                        Open the item
-                      </Link>
+                        icon={ListChecks}
+                        label="Item"
+                      />
                     ) : null}
                     {finding.bookingIds?.[0] ? (
-                      <Link
+                      <JumpLink
                         to={`/t/${bundle.trip.id}/bookings/${finding.bookingIds[0]}`}
-                        className="inline-flex min-h-[36px] items-center rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600"
-                      >
-                        Open the booking
-                      </Link>
+                        icon={Ticket}
+                        label="Booking"
+                      />
                     ) : null}
 
                     {finding.status === 'open' ? (
@@ -122,7 +155,7 @@ export function ConflictInboxPage() {
                           <Check size={15} aria-hidden /> Sorted
                         </Button>
                         <Button onClick={() => resolve(finding, 'dismissed')}>
-                          <EyeOff size={15} aria-hidden /> Not a problem
+                          <EyeOff size={15} aria-hidden /> Ignore
                         </Button>
                       </>
                     ) : (
@@ -139,14 +172,7 @@ export function ConflictInboxPage() {
       )}
 
       {!showResolved && audit.notes.length > 0 ? (
-        <details className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-          <summary className="cursor-pointer text-sm font-medium">
-            {audit.notes.length} smaller observations
-          </summary>
-          <p className="mt-1 mb-3 text-sm text-slate-500">
-            Gaps in the day, places listed more than once, and similar. Nothing here is wrong, it is
-            just what the plan does not say.
-          </p>
+        <Disclosure title="Smaller observations" count={audit.notes.length}>
           <ul className="space-y-2">
             {audit.notes.map((note) => (
               <li key={note.key} className="text-sm">
@@ -164,9 +190,31 @@ export function ConflictInboxPage() {
               </li>
             ))}
           </ul>
-        </details>
+        </Disclosure>
       ) : null}
     </>
+  );
+}
+
+/** One of the three places a finding can send you. The icon carries the "open"; the label
+ * only has to name the destination. */
+function JumpLink({
+  to,
+  icon: Icon,
+  label,
+}: {
+  to: string;
+  icon: typeof CalendarDays;
+  label: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600"
+    >
+      <Icon size={15} aria-hidden />
+      {label}
+    </Link>
   );
 }
 
@@ -183,10 +231,7 @@ export function RemindersPage() {
 
   return (
     <>
-      <PageHeader
-        title="Reminders"
-        subtitle="Most of these fire the evening before the day they serve."
-      />
+      <PageHeader title="Reminders" />
       <Section title={`Coming up (${upcoming.length})`}>
         <div className="space-y-2">
           {upcoming.map((reminder) => (

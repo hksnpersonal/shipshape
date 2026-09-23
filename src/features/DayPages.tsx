@@ -8,9 +8,11 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   ExternalLink,
   Plus,
@@ -21,7 +23,9 @@ import {
   Button,
   Card,
   Chip,
+  Disclosure,
   EmptyState,
+  FilterChips,
   PageHeader,
   Section,
   TagChip,
@@ -299,58 +303,42 @@ export function DayTimelinePage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {TAGS.map((tag) => (
-          <button
-            key={tag}
-            type="button"
-            onClick={() => toggleTag(tag)}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs font-semibold',
-              active.has(tag)
-                ? 'border-brand-500 bg-brand-100 text-brand-800 dark:bg-brand-900/60 dark:text-brand-100'
-                : 'border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-400',
-            )}
-          >
-            {tag}
-          </button>
-        ))}
-        {active.size > 0 ? (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              params.delete('tags');
-              setParams(params, { replace: true });
-            }}
-          >
-            Show everything
-          </Button>
-        ) : null}
-      </div>
+      <FilterChips
+        label="Filter this day by tag"
+        options={TAGS.map((tag) => ({
+          value: tag,
+          label: tag,
+          count: allItems.filter((i) => i.tags.includes(tag)).length,
+        }))}
+        active={active}
+        onToggle={toggleTag}
+        onClear={() => {
+          params.delete('tags');
+          setParams(params, { replace: true });
+        }}
+      />
 
       {problems.length > 0 ? (
-        <Card className="mb-4 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30">
-          <p className="text-sm font-medium">
-            {problems.length} thing{problems.length === 1 ? '' : 's'} to resolve on this day
-          </p>
-          <Link
-            to={`/t/${bundle.trip.id}/conflicts`}
-            className="text-brand-700 dark:text-brand-300 text-sm font-medium"
-          >
-            Open the inbox
-          </Link>
-        </Card>
+        <Link
+          to={`/t/${bundle.trip.id}/conflicts`}
+          className="mb-4 flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium dark:border-amber-700 dark:bg-amber-900/30"
+        >
+          <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" aria-hidden />
+          {problems.length} to resolve
+          <ChevronRight
+            size={16}
+            className="ml-auto text-amber-600 dark:text-amber-400"
+            aria-hidden
+          />
+        </Link>
       ) : null}
 
       {swapPartners.length > 0 ? (
         <Card className="mb-4">
-          <p className="mb-1 flex items-center gap-2 text-sm font-medium">
+          <p className="mb-2 flex items-center gap-2 text-sm font-medium">
             <ArrowLeftRight size={15} aria-hidden />
-            This day can be swapped for the weather
+            Swap for weather
           </p>
-          {swapGroup?.rule ? (
-            <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">{swapGroup.rule}</p>
-          ) : null}
           <div className="flex flex-wrap gap-2">
             {swapPartners.map((partner) => (
               <Button
@@ -361,10 +349,17 @@ export function DayTimelinePage() {
                     .then((plan) => setSwapResult(plan));
                 }}
               >
-                Swap with {formatDayLabel(partner.date)}
+                {formatDayLabel(partner.date)}
               </Button>
             ))}
           </div>
+          {swapGroup?.rule ? (
+            <div className="mt-2">
+              <Disclosure title="Which day to pick">
+                <p className="text-slate-600 dark:text-slate-300">{swapGroup.rule}</p>
+              </Disclosure>
+            </div>
+          ) : null}
           {swapResult ? (
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               {swapResult.moves.length} items moved.
@@ -381,9 +376,7 @@ export function DayTimelinePage() {
       ) : null}
 
       {items.length === 0 ? (
-        <EmptyState title="Nothing matches that filter.">
-          Clear the tags to see the whole day.
-        </EmptyState>
+        <EmptyState title="Nothing matches that filter." />
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
@@ -688,7 +681,7 @@ export function ItemDetailPage() {
       )}
 
       {item.travel ? (
-        <Section title="The journey">
+        <Section title="Journey">
           <Card>
             <p className="font-medium">
               {item.travel.from.name} to {item.travel.to.name}
@@ -738,7 +731,7 @@ export function ItemDetailPage() {
       ) : null}
 
       {item.openingHours ? (
-        <Section title="Opening hours">
+        <Section title="Hours">
           <Card>
             <p className="text-sm">{describeHours(item.openingHours)}</p>
             {item.openingHours.rawText ? (
@@ -765,7 +758,7 @@ export function ItemDetailPage() {
       ) : null}
 
       {links.length > 0 ? (
-        <Section title="Open elsewhere">
+        <Section title="Links">
           <div className="flex flex-wrap gap-2">
             {links.map((link) => (
               <OutLink key={link.url} href={link.url}>
@@ -778,7 +771,7 @@ export function ItemDetailPage() {
       ) : null}
 
       {guide ? (
-        <Section title="How to book this">
+        <Section title="Booking guide">
           <Card>
             <p className="font-medium">{guide.title}</p>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{guide.summary}</p>

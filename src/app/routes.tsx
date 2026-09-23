@@ -1,14 +1,10 @@
 import { createBrowserRouter } from 'react-router';
 import { AppShell } from './AppShell';
-import {
-  BookingDetailPage,
-  BookingsBoardPage,
-  PlaybookDetailPage,
-  PlaybookIndexPage,
-} from '@/features/BookingPages';
-import { ConflictInboxPage, RemindersPage, SettingsPage } from '@/features/InboxPages';
+import { BookingDetailPage, BookingsBoardPage } from '@/features/BookingPages';
 import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
 import { DocumentsVaultPage } from '@/features/DocumentPages';
+import { ConflictInboxPage, RemindersPage, SettingsPage } from '@/features/InboxPages';
+import { PlaybookDetailPage, PlaybookIndexPage } from '@/features/PlaybookPages';
 import {
   DaysIndexPage,
   TodayRedirectPage,

@@ -63,7 +63,7 @@ describe('the day timeline', () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
     await screen.findByText('TGV Lyria to Paris');
 
-    await user.click(screen.getByRole('button', { name: 'CONFLICT' }));
+    await user.click(screen.getByRole('button', { name: /CONFLICT/ }));
 
     await waitFor(() => {
       expect(screen.queryByText('Train to Interlaken Ost')).not.toBeInTheDocument();
@@ -92,9 +92,9 @@ describe('the day timeline', () => {
 describe('the conflict inbox', () => {
   it('leads with what cannot happen and keeps observations out of the way', async () => {
     renderAt(`/t/${TRIP}/conflicts`);
-    expect(await screen.findByText(/Cannot happen as planned/)).toBeInTheDocument();
-    expect(screen.getByText(/Worth checking before you go/)).toBeInTheDocument();
-    expect(screen.getByText(/smaller observations/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Blocked/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Check/ })).toBeInTheDocument();
+    expect(screen.getByText(/Smaller observations/)).toBeInTheDocument();
   });
 
   it('shows the stale Paris arrival as a finding with a fix', async () => {
@@ -124,7 +124,7 @@ describe('the conflict inbox', () => {
     expect(states.some((s) => s.status === 'resolved' && s.ruleId === 'time-overlap')).toBe(true);
 
     // And it comes back under the cleared view.
-    await user.click(screen.getByRole('button', { name: 'Show cleared' }));
+    await user.click(screen.getByRole('button', { name: /Cleared/ }));
     expect(
       await screen.findByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
     ).toBeInTheDocument();
@@ -137,12 +137,12 @@ describe('nothing is a dead end', () => {
     renderAt(`/t/${TRIP}`);
     const reminders = await screen.findByText('Reminders');
     expect(reminders.closest('a')).toHaveAttribute('href', `/t/${TRIP}/reminders`);
-    expect(screen.getByText('Booking playbook').closest('a')).toHaveAttribute('href', '/playbook');
+    expect(screen.getByText('Playbook').closest('a')).toHaveAttribute('href', '/playbook');
   });
 
   it('offers a way to jump to today from the day list', async () => {
     renderAt(`/t/${TRIP}/days`);
-    const jump = await screen.findByText('Jump to today');
+    const jump = await screen.findByText('Today');
     expect(jump.closest('a')).toHaveAttribute('href', `/t/${TRIP}/today`);
   });
 
@@ -428,7 +428,7 @@ describe('adding an item', () => {
     await screen.findByText('Leonardo Express to Roma Termini');
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'MUST' }));
+    await user.click(screen.getByRole('button', { name: /MUST/ }));
     await waitFor(() => {
       expect(screen.queryByText('Leonardo Express to Roma Termini')).not.toBeInTheDocument();
     });
@@ -508,7 +508,7 @@ describe('deleting an item', () => {
     // A fresh mount, not the same live subtree: proves the plan re-checks itself when a
     // line goes, not only when one changes.
     renderAt(`/t/${TRIP}/conflicts`);
-    await screen.findByText(/Cannot happen as planned/);
+    await screen.findByRole('heading', { name: /Blocked/ });
     expect(
       screen.queryByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
     ).not.toBeInTheDocument();
@@ -536,7 +536,7 @@ describe('adding a booking', () => {
     await screen.findByRole('heading', { name: 'Bookings' });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
     await user.type(screen.getByLabelText('Title'), 'Ferry to Bellagio');
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-10' } });
     await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -554,7 +554,7 @@ describe('adding a booking', () => {
     await screen.findByRole('heading', { name: 'Bookings' });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
     await user.type(screen.getByLabelText('Title'), 'Airport transfer');
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
     await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -570,7 +570,7 @@ describe('adding a booking', () => {
     const before = await db.bookings.count();
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
     expect(await screen.findByText('Give it a title.')).toBeInTheDocument();
 
@@ -586,7 +586,7 @@ describe('adding a booking', () => {
     await screen.findByRole('heading', { name: 'Bookings' });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Add a booking' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
     expect(screen.queryByText('Frecciarossa and other Trenitalia high-speed trains')).toBeNull();
 
     await user.selectOptions(screen.getByLabelText('Kind'), 'train');

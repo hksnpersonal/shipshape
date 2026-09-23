@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ExternalLink, Plus, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react';
+import { ExternalLink, Plus } from 'lucide-react';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -22,13 +22,13 @@ import { bookingsRepo } from '@/db/repo';
 import { itemsOfBooking } from '@/domain/bundle';
 import { formatDayLabel } from '@/domain/time';
 import { AttachDocumentButton, DocumentRow } from '@/features/DocumentPages';
+import { GuideCard } from '@/features/PlaybookPages';
 import { bookingLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { bookBy } from '@/playbook/bookBy';
 import { useBookBy, useDocumentsFor, useToday, useTripBundle } from '@/hooks/useTrip';
 import type { Booking, BookingKind, BookingStatus, ID } from '@/domain/types';
 import type { BookByEntry } from '@/playbook/bookBy';
-import type { Reseller } from '@/playbook/types';
 
 const STATUS_WORDS: Record<BookingStatus, string> = {
   to_book: 'Still to book',
@@ -272,11 +272,10 @@ export function BookingsBoardPage() {
     <>
       <PageHeader
         title="Bookings"
-        subtitle={`${entries.length} things across the trip, ordered by when they need doing`}
         actions={
           !addingBooking ? (
             <Button variant="primary" onClick={() => setAddingBooking(true)}>
-              <Plus size={15} aria-hidden /> Add a booking
+              <Plus size={15} aria-hidden /> New
             </Button>
           ) : undefined
         }
@@ -474,18 +473,6 @@ function BookingEditForm({
   );
 }
 
-function TrustIcon({ trust }: { trust: Reseller['trust'] }) {
-  if (trust === 'fine') return <ShieldCheck size={15} className="text-emerald-600" aria-hidden />;
-  if (trust === 'avoid') return <ShieldX size={15} className="text-rose-600" aria-hidden />;
-  return <ShieldAlert size={15} className="text-amber-600" aria-hidden />;
-}
-
-const TRUST_WORDS: Record<Reseller['trust'], string> = {
-  fine: 'Fine to use',
-  'ok-with-markup': 'Works, with a markup',
-  avoid: 'Avoid',
-};
-
 export function BookingDetailPage() {
   const { tripId, bookingId } = useParams();
   const bundle = useTripBundle(tripId);
@@ -605,169 +592,6 @@ export function BookingDetailPage() {
               );
             })}
           </div>
-        </Section>
-      ) : null}
-    </>
-  );
-}
-
-/** The playbook entry rendered inline, used from a booking and from an item. */
-export function GuideCard({ guideId }: { guideId: string }) {
-  const guide = allGuides.find((g) => g.id === guideId);
-  if (!guide) return null;
-
-  return (
-    <Section title="How to book this reliably">
-      <Card>
-        <p className="font-medium">{guide.title}</p>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{guide.summary}</p>
-
-        <p className="mt-3 text-sm font-semibold">When to book</p>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{guide.bookAdvice.note}</p>
-
-        <p className="mt-3 text-sm font-semibold">Where to book</p>
-        <div className="mt-1">
-          <OutLink href={guide.official.url}>
-            {guide.official.name}, the official channel
-            <ExternalLink size={13} className="ml-1.5" aria-hidden />
-          </OutLink>
-        </div>
-        {guide.official.note ? (
-          <p className="mt-1 text-sm text-slate-500">{guide.official.note}</p>
-        ) : null}
-
-        {guide.resellers?.length ? (
-          <ul className="mt-2 space-y-1.5">
-            {guide.resellers.map((reseller) => (
-              <li key={reseller.url} className="flex items-start gap-2 text-sm">
-                <span className="mt-0.5">
-                  <TrustIcon trust={reseller.trust} />
-                </span>
-                <span>
-                  <span className="font-medium">{reseller.name}</span>
-                  <span className="text-slate-500"> · {TRUST_WORDS[reseller.trust]}</span>
-                  {reseller.note ? (
-                    <span className="block text-slate-500">{reseller.note}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
-        {guide.validation?.required ? (
-          <>
-            <p className="mt-3 text-sm font-semibold text-amber-700 dark:text-amber-300">
-              Validation
-            </p>
-            <p className="text-sm text-slate-600 dark:text-slate-300">{guide.validation.note}</p>
-          </>
-        ) : null}
-
-        {guide.refundRules ? (
-          <>
-            <p className="mt-3 text-sm font-semibold">Refunds</p>
-            <p className="text-sm text-slate-600 dark:text-slate-300">{guide.refundRules}</p>
-          </>
-        ) : null}
-
-        {guide.passCoverage?.length ? (
-          <>
-            <p className="mt-3 text-sm font-semibold">Rail pass</p>
-            <ul className="text-sm text-slate-600 dark:text-slate-300">
-              {guide.passCoverage.map((cover) => (
-                <li key={cover.passId}>
-                  {cover.coverage === 'covered'
-                    ? 'Fully covered'
-                    : cover.coverage === 'discount'
-                      ? 'Discounted, not free'
-                      : 'Not covered'}
-                  {cover.note ? `. ${cover.note}` : ''}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-
-        {guide.gotchas?.length ? (
-          <>
-            <p className="mt-3 text-sm font-semibold">What catches people out</p>
-            <ul className="list-inside list-disc space-y-1 text-sm text-slate-600 dark:text-slate-300">
-              {guide.gotchas.map((gotcha) => (
-                <li key={gotcha}>{gotcha}</li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-
-        <p className="mt-3 text-xs text-slate-400">Checked {guide.lastReviewed}</p>
-      </Card>
-    </Section>
-  );
-}
-
-export function PlaybookIndexPage() {
-  const byCountry = new Map<string, typeof allGuides>();
-  for (const guide of allGuides) {
-    const list = byCountry.get(guide.countryCode) ?? [];
-    list.push(guide);
-    byCountry.set(guide.countryCode, list);
-  }
-  const NAMES: Record<string, string> = {
-    IT: 'Italy',
-    CH: 'Switzerland',
-    FR: 'France',
-    BE: 'Belgium',
-    NL: 'Netherlands',
-    EU: 'Anywhere in Europe',
-  };
-
-  return (
-    <>
-      <PageHeader
-        title="Booking playbook"
-        subtitle="Where to buy each kind of ticket, when, and what to watch for. Works offline."
-      />
-      {[...byCountry.entries()].map(([code, guides]) => (
-        <Section key={code} title={NAMES[code] ?? code}>
-          <div className="space-y-2">
-            {guides.map((guide) => (
-              <LinkCard key={guide.id} to={`/playbook/${guide.id}`}>
-                <p className="font-medium">{guide.title}</p>
-                <p className="text-sm text-slate-500">{guide.summary}</p>
-              </LinkCard>
-            ))}
-          </div>
-        </Section>
-      ))}
-    </>
-  );
-}
-
-export function PlaybookDetailPage() {
-  const { guideId } = useParams();
-  const navigate = useNavigate();
-  const guide = allGuides.find((g) => g.id === guideId);
-  if (!guide) return <EmptyState title="No such guide." />;
-
-  return (
-    <>
-      <PageHeader
-        title={guide.title}
-        actions={<Button onClick={() => void navigate(-1)}>Back</Button>}
-      />
-      <GuideCard guideId={guide.id} />
-      {guide.sources?.length ? (
-        <Section title="Checked against">
-          <ul className="space-y-1 text-sm">
-            {guide.sources.map((source) => (
-              <li key={source}>
-                <Link to={source} className="text-brand-700 dark:text-brand-300 break-all">
-                  {source}
-                </Link>
-              </li>
-            ))}
-          </ul>
         </Section>
       ) : null}
     </>
