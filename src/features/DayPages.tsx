@@ -10,8 +10,10 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   AlertTriangle,
   ArrowLeftRight,
+  ArrowRight,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   ExternalLink,
@@ -22,6 +24,7 @@ import { allGuides } from '@/content/guides';
 import {
   Button,
   Card,
+  CategoryIcon,
   Chip,
   Disclosure,
   EmptyState,
@@ -32,16 +35,18 @@ import {
   OutLink,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
-import { bookingOf, itemsForDay, orderedDays } from '@/domain/bundle';
-import { formatDayLabel } from '@/domain/time';
+import { accommodationForDate, bookingOf, itemsForDay, orderedDays } from '@/domain/bundle';
+import { formatDayLabel, toMinutes } from '@/domain/time';
 import { daysRepo, itemsRepo } from '@/db/repo';
 import { describeHours } from '@/domain/hours';
 import { itemLinks } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
+import { bookingCategory, itemCategory } from '@/domain/categories';
 import type { DaySwapPlan } from '@/domain/swap';
 import type {
   Booking,
+  Day,
   ID,
   Item,
   ItemType,
@@ -68,20 +73,52 @@ const TIME_LABELS: TimeLabel[] = ['morning', 'afternoon', 'evening'];
 const fieldClass =
   'w-full min-h-[40px] rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600 dark:bg-slate-800';
 
-/** A short word for what kind of thing this is, preferring the actual vehicle. */
-function kindLabel(item: Item): string {
-  if (item.travel) return item.travel.mode;
-  const words: Record<Item['type'], string> = {
-    transport: 'travel',
-    transfer: 'travel',
-    sight: 'see',
-    meal: 'eat',
-    shop: 'buy',
-    admin: 'admin',
-    reminder: 'note',
-    freeform: '',
-  };
-  return words[item.type];
+/** Plain words for a tag chip on a compact row - nobody scanning a platform thinks "CONFLICT". */
+const TAG_WORDS: Record<Tag, string> = {
+  MUST: 'Must do',
+  OPTIONAL: 'Optional',
+  CHECK: 'Check',
+  CONFLICT: 'Clash',
+};
+
+const TAG_TONES: Record<Tag, 'neutral' | 'good' | 'warn' | 'bad' | 'brand'> = {
+  MUST: 'bad',
+  OPTIONAL: 'brand',
+  CHECK: 'warn',
+  CONFLICT: 'bad',
+};
+
+/** The one word a compact row needs for a linked booking - nothing to book reads as nothing. */
+function bookingWord(status: Booking['status']): string | null {
+  // "on_site" means nothing is held yet: calling it booked would send a first-time
+  // visitor to a museum queue expecting a ticket they do not have.
+  if (status === 'to_book') return 'Still to book';
+  if (status === 'on_site') return 'Buy on the day';
+  if (status === 'booked' || status === 'confirmed') return 'Booked';
+  return null;
+}
+
+type TimeGroup = 'morning' | 'afternoon' | 'evening' | 'any';
+
+const TIME_GROUP_LABELS: Record<TimeGroup, string> = {
+  morning: 'Morning',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+  any: 'Any time',
+};
+
+const TIME_GROUP_ORDER: TimeGroup[] = ['morning', 'afternoon', 'evening', 'any'];
+
+/** Which heading an item falls under: an exact time wins, then the fuzzy label, else "Any time". */
+function timeGroupOf(item: Item): TimeGroup {
+  const minutes = toMinutes(item.time);
+  if (minutes !== null) {
+    if (minutes < 12 * 60) return 'morning';
+    if (minutes < 17 * 60) return 'afternoon';
+    return 'evening';
+  }
+  if (item.timeLabel) return item.timeLabel;
+  return 'any';
 }
 
 /**
@@ -110,116 +147,124 @@ function passengerSeatSummary(passengers: Passenger[]): string | null {
     .join('; ');
 }
 
+/**
+ * One line in the day, ~48-56px tall by default: icon, time, title, at most one note line,
+ * and only the chips that earn their place. Everything else - done/skip/move - is edit
+ * machinery, and edit machinery is what made a normal day 2300px tall, so it only appears
+ * once `editMode` says the traveller asked for it.
+ */
 function ItemRow({
   item,
   bundle,
   isNext,
+  editMode,
   onToggle,
   onMove,
 }: {
   item: Item;
   bundle: TripBundle;
   isNext: boolean;
+  editMode: boolean;
   onToggle: (status: Item['status']) => void;
   onMove: (dir: 'up' | 'down') => void;
 }) {
   const booking = bookingOf(bundle, item);
   const done = item.status === 'done';
   const skipped = item.status === 'skipped';
+  const bookingWordText = booking ? bookingWord(booking.status) : null;
 
   const control = 'rounded-lg border border-slate-300 p-2 text-slate-400 dark:border-slate-600';
 
   return (
     <div
       className={cn(
-        'rounded-xl border p-3',
+        'rounded-xl border',
         isNext
           ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-900/30'
           : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800',
         (done || skipped) && 'opacity-50',
       )}
     >
-      <div className="flex gap-3">
-        <div className="w-14 shrink-0 pt-0.5 text-right">
+      <Link
+        to={`/t/${bundle.trip.id}/items/${item.id}`}
+        className="flex min-h-[48px] items-center gap-2.5 p-2.5"
+      >
+        <CategoryIcon category={itemCategory(item.type)} size="sm" />
+        <div className="w-11 shrink-0 text-right">
           {item.time ? (
-            <p className="text-sm font-semibold tabular-nums">
+            <p className="text-xs font-semibold tabular-nums">
               {item.timeApprox ? '~' : ''}
               {item.time}
             </p>
           ) : item.timeLabel ? (
-            <p className="text-xs text-slate-400 capitalize">{item.timeLabel}</p>
-          ) : null}
-          {item.timeEnd ? (
-            <p className="text-xs text-slate-400 tabular-nums">{item.timeEnd}</p>
+            <p className="text-[11px] text-slate-400 capitalize">{item.timeLabel}</p>
           ) : null}
         </div>
 
         <div className="min-w-0 flex-1">
-          <Link
-            to={`/t/${bundle.trip.id}/items/${item.id}`}
-            className={cn('font-medium', done && 'line-through')}
-          >
-            {item.title}
-          </Link>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {kindLabel(item) ? <Chip>{kindLabel(item)}</Chip> : null}
-            {item.tags.map((tag) => (
-              <TagChip key={tag} tag={tag} />
-            ))}
-            {booking ? (
-              <Chip tone={booking.status === 'to_book' ? 'warn' : 'good'}>
-                {booking.status === 'to_book' ? 'to book' : booking.status.replace('_', ' ')}
-              </Chip>
-            ) : null}
-            {item.travel?.seatSide ? <Chip tone="brand">sit {item.travel.seatSide}</Chip> : null}
-          </div>
+          <p className={cn('truncate text-sm font-medium', done && 'line-through')}>{item.title}</p>
           {item.notes ? (
-            <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">{item.notes}</p>
+            <p className="line-clamp-1 text-xs text-slate-500 dark:text-slate-400">{item.notes}</p>
           ) : null}
-
-          <div className="mt-2 flex items-center gap-1.5">
-            <button
-              type="button"
-              aria-label={done ? 'Mark as still to do' : 'Mark as done'}
-              onClick={() => onToggle(done ? 'planned' : 'done')}
-              className={cn(
-                control,
-                done && 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-500',
-              )}
-            >
-              <Check size={15} aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label={skipped ? 'Put back in the plan' : 'Skip this'}
-              onClick={() => onToggle(skipped ? 'planned' : 'skipped')}
-              className={cn(
-                control,
-                skipped && 'border-slate-500 bg-slate-500 text-white dark:border-slate-500',
-              )}
-            >
-              <SkipForward size={15} aria-hidden />
-            </button>
-            <span className="flex-1" />
-            <button
-              type="button"
-              aria-label="Move earlier"
-              onClick={() => onMove('up')}
-              className={control}
-            >
-              <ChevronUp size={15} aria-hidden />
-            </button>
-            <button
-              type="button"
-              aria-label="Move later"
-              onClick={() => onMove('down')}
-              className={control}
-            >
-              <ChevronDown size={15} aria-hidden />
-            </button>
-          </div>
         </div>
-      </div>
+
+        {item.tags.length > 0 || bookingWordText ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            {item.tags.map((tag) => (
+              <Chip key={tag} tone={TAG_TONES[tag]}>
+                {TAG_WORDS[tag]}
+              </Chip>
+            ))}
+            {bookingWordText ? (
+              <Chip tone={bookingWordText === 'Booked' ? 'good' : 'warn'}>{bookingWordText}</Chip>
+            ) : null}
+          </div>
+        ) : null}
+      </Link>
+
+      {editMode ? (
+        <div className="flex items-center gap-1.5 border-t border-slate-100 px-2.5 py-1.5 dark:border-slate-700">
+          <button
+            type="button"
+            aria-label={done ? 'Mark as still to do' : 'Mark as done'}
+            onClick={() => onToggle(done ? 'planned' : 'done')}
+            className={cn(
+              control,
+              done && 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-500',
+            )}
+          >
+            <Check size={15} aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label={skipped ? 'Put back in the plan' : 'Skip this'}
+            onClick={() => onToggle(skipped ? 'planned' : 'skipped')}
+            className={cn(
+              control,
+              skipped && 'border-slate-500 bg-slate-500 text-white dark:border-slate-500',
+            )}
+          >
+            <SkipForward size={15} aria-hidden />
+          </button>
+          <span className="flex-1" />
+          <button
+            type="button"
+            aria-label="Move earlier"
+            onClick={() => onMove('up')}
+            className={control}
+          >
+            <ChevronUp size={15} aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label="Move later"
+            onClick={() => onMove('down')}
+            className={control}
+          >
+            <ChevronDown size={15} aria-hidden />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -292,6 +337,96 @@ function AddItemForm({
   );
 }
 
+/** A booked ticket for today: icon, time if there is one, title, straight to the booking. */
+function TicketRow({ tripId, booking }: { tripId: ID; booking: Booking }) {
+  return (
+    <Link
+      to={`/t/${tripId}/bookings/${booking.id}`}
+      className="-mx-1 flex min-h-[36px] items-center gap-2 rounded-lg px-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50"
+    >
+      <CategoryIcon category={bookingCategory(booking.kind)} size="sm" />
+      <span className="w-11 shrink-0 text-right text-xs font-semibold text-slate-500 tabular-nums">
+        {booking.depart ?? ''}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{booking.title}</span>
+    </Link>
+  );
+}
+
+/**
+ * The one thing this screen was missing: where you sleep tonight, and what is already
+ * booked today. Everything else on the day is negotiable; these two things are not, so
+ * they sit above the fold instead of buried in a 2300px scroll.
+ */
+function DaySummaryCard({
+  bundle,
+  day,
+  prevDay,
+}: {
+  bundle: TripBundle;
+  day: Day;
+  prevDay: Day | undefined;
+}) {
+  const tonight = accommodationForDate(bundle, day.date);
+  const checkingOut = bundle.accommodations.find((a) => a.checkOut === day.date);
+  const leaving = prevDay && prevDay.city !== day.city;
+  const moveItem = leaving
+    ? itemsForDay(bundle, day.id).find((i) => i.travel && i.time)
+    : undefined;
+  const tickets = bundle.bookings.filter(
+    (b) => b.date === day.date && (b.status === 'booked' || b.status === 'confirmed'),
+  );
+
+  if (!tonight && !checkingOut && !moveItem && tickets.length === 0) return null;
+
+  return (
+    <Card className="mb-4">
+      <div className="space-y-2.5">
+        {checkingOut ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Check out by {checkingOut.checkOutTime ?? '10:00'}
+          </p>
+        ) : null}
+
+        {moveItem?.travel && prevDay ? (
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            <ArrowRight size={14} className="shrink-0 text-slate-400" aria-hidden />
+            {prevDay.city} → {day.city} by {moveItem.travel.mode} {moveItem.time}
+          </p>
+        ) : null}
+
+        {tonight ? (
+          <div className="flex items-center gap-2">
+            <CategoryIcon category="stay" size="sm" />
+            <p className="min-w-0 text-sm">
+              <span className="font-medium">Tonight: {tonight.name}</span>
+              {tonight.checkIn === day.date && tonight.checkInTime ? (
+                <span className="text-slate-500 dark:text-slate-400">
+                  {' '}
+                  · check-in from {tonight.checkInTime}
+                </span>
+              ) : null}
+            </p>
+          </div>
+        ) : null}
+
+        {tickets.length > 0 ? (
+          <div>
+            <p className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+              Tickets today
+            </p>
+            <div>
+              {tickets.map((booking) => (
+                <TicketRow key={booking.id} tripId={bundle.trip.id} booking={booking} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
 export function DayTimelinePage() {
   const { tripId, dayId } = useParams();
   const bundle = useTripBundle(tripId);
@@ -300,6 +435,7 @@ export function DayTimelinePage() {
   const [params, setParams] = useSearchParams();
   const [swapResult, setSwapResult] = useState<DaySwapPlan | null>(null);
   const [addingItem, setAddingItem] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const day = bundle.days.find((d) => d.id === dayId);
@@ -326,6 +462,20 @@ export function DayTimelinePage() {
     (d) => swapGroup?.dayIds.includes(d.id) && d.id !== day.id,
   );
 
+  const ordered = orderedDays(bundle);
+  const dayIndex = ordered.findIndex((d) => d.id === day.id);
+  const prevDay = dayIndex > 0 ? ordered[dayIndex - 1] : undefined;
+  const nextDay =
+    dayIndex >= 0 && dayIndex < ordered.length - 1 ? ordered[dayIndex + 1] : undefined;
+
+  const groups = new Map<TimeGroup, Item[]>();
+  for (const item of items) {
+    const group = timeGroupOf(item);
+    const list = groups.get(group);
+    if (list) list.push(item);
+    else groups.set(group, [item]);
+  }
+
   return (
     <>
       <PageHeader
@@ -336,22 +486,44 @@ export function DayTimelinePage() {
             {day.theme ? ` · ${day.theme}` : ''}
           </>
         }
+        actions={
+          <>
+            <Link
+              to={prevDay ? `/t/${bundle.trip.id}/days/${prevDay.id}` : '#'}
+              aria-label="Previous day"
+              aria-disabled={!prevDay}
+              onClick={(event) => {
+                if (!prevDay) event.preventDefault();
+              }}
+              className={cn(
+                'inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600',
+                !prevDay && 'pointer-events-none opacity-30',
+              )}
+            >
+              <ChevronLeft size={16} aria-hidden />
+            </Link>
+            <Link
+              to={nextDay ? `/t/${bundle.trip.id}/days/${nextDay.id}` : '#'}
+              aria-label="Next day"
+              aria-disabled={!nextDay}
+              onClick={(event) => {
+                if (!nextDay) event.preventDefault();
+              }}
+              className={cn(
+                'inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600',
+                !nextDay && 'pointer-events-none opacity-30',
+              )}
+            >
+              <ChevronRight size={16} aria-hidden />
+            </Link>
+            <Button onClick={() => setEditMode((v) => !v)}>
+              {editMode ? 'Done editing' : 'Edit day'}
+            </Button>
+          </>
+        }
       />
 
-      <FilterChips
-        label="Filter this day by tag"
-        options={TAGS.map((tag) => ({
-          value: tag,
-          label: tag,
-          count: allItems.filter((i) => i.tags.includes(tag)).length,
-        }))}
-        active={active}
-        onToggle={toggleTag}
-        onClear={() => {
-          params.delete('tags');
-          setParams(params, { replace: true });
-        }}
-      />
+      <DaySummaryCard bundle={bundle} day={day} prevDay={prevDay} />
 
       {problems.length > 0 ? (
         <Link
@@ -369,85 +541,107 @@ export function DayTimelinePage() {
       ) : null}
 
       {swapPartners.length > 0 ? (
-        <Card className="mb-4">
-          <p className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <ArrowLeftRight size={15} aria-hidden />
-            Swap for weather
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {swapPartners.map((partner) => (
-              <Button
-                key={partner.id}
-                onClick={() => {
-                  void daysRepo
-                    .swapContents(bundle.trip.id, day.id, partner.id)
-                    .then((plan) => setSwapResult(plan));
-                }}
-              >
-                {formatDayLabel(partner.date)}
-              </Button>
-            ))}
-          </div>
-          {swapGroup?.rule ? (
-            <div className="mt-2">
-              <Disclosure title="Which day to pick">
-                <p className="text-slate-600 dark:text-slate-300">{swapGroup.rule}</p>
-              </Disclosure>
+        <div className="mb-4">
+          <Disclosure title="Swap for weather" icon={ArrowLeftRight}>
+            <div className="flex flex-wrap gap-2">
+              {swapPartners.map((partner) => (
+                <Button
+                  key={partner.id}
+                  onClick={() => {
+                    void daysRepo
+                      .swapContents(bundle.trip.id, day.id, partner.id)
+                      .then((plan) => setSwapResult(plan));
+                  }}
+                >
+                  {formatDayLabel(partner.date)}
+                </Button>
+              ))}
             </div>
-          ) : null}
-          {swapResult ? (
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-              {swapResult.moves.length} items moved.
-              {swapResult.heldBack.length > 0
-                ? ` ${swapResult.heldBack.map((h) => h.title).join(', ')} stayed put because ${
-                    swapResult.heldBack[0]?.reason === 'booked'
-                      ? 'they are already booked'
-                      : 'they are pinned to the date'
-                  }.`
-                : ''}
-            </p>
-          ) : null}
-        </Card>
+            {swapGroup?.rule ? (
+              <p className="mt-2 text-slate-600 dark:text-slate-300">{swapGroup.rule}</p>
+            ) : null}
+            {swapResult ? (
+              <p className="mt-2 text-slate-600 dark:text-slate-300">
+                {swapResult.moves.length} items moved.
+                {swapResult.heldBack.length > 0
+                  ? ` ${swapResult.heldBack.map((h) => h.title).join(', ')} stayed put because ${
+                      swapResult.heldBack[0]?.reason === 'booked'
+                        ? 'they are already booked'
+                        : 'they are pinned to the date'
+                    }.`
+                  : ''}
+              </p>
+            ) : null}
+          </Disclosure>
+        </div>
+      ) : null}
+
+      {editMode ? (
+        <FilterChips
+          label="Filter this day by tag"
+          options={TAGS.map((tag) => ({
+            value: tag,
+            label: tag,
+            count: allItems.filter((i) => i.tags.includes(tag)).length,
+          }))}
+          active={active}
+          onToggle={toggleTag}
+          onClear={() => {
+            params.delete('tags');
+            setParams(params, { replace: true });
+          }}
+        />
       ) : null}
 
       {items.length === 0 ? (
         <EmptyState title="Nothing matches that filter." />
       ) : (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              bundle={bundle}
-              isNext={item.id === nextItem?.id}
-              onToggle={(status) => void itemsRepo.setStatus(item.id, status)}
-              onMove={(dir) => void itemsRepo.move(day.id, item.id, dir)}
-            />
-          ))}
-        </div>
+        TIME_GROUP_ORDER.map((group) => {
+          const groupItems = groups.get(group);
+          if (!groupItems || groupItems.length === 0) return null;
+          return (
+            <Section key={group} title={TIME_GROUP_LABELS[group]}>
+              <div className="space-y-2">
+                {groupItems.map((item) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    bundle={bundle}
+                    isNext={item.id === nextItem?.id}
+                    editMode={editMode}
+                    onToggle={(status) => void itemsRepo.setStatus(item.id, status)}
+                    onMove={(dir) => void itemsRepo.move(day.id, item.id, dir)}
+                  />
+                ))}
+              </div>
+            </Section>
+          );
+        })
       )}
 
-      {addingItem ? (
-        <AddItemForm
-          tripId={bundle.trip.id}
-          dayId={day.id}
-          onCancel={() => setAddingItem(false)}
-          onAdded={() => {
-            setAddingItem(false);
-            // A new line carries no tags, so under an active filter it would land somewhere
-            // the user cannot see. Appearing to swallow what someone just typed is the one
-            // thing this must not do, so the filter gives way to the new item.
-            if (active.size > 0) {
-              params.delete('tags');
-              setParams(params, { replace: true });
-            }
-          }}
-        />
-      ) : (
-        <Button className="mt-2" onClick={() => setAddingItem(true)}>
-          <Plus size={15} aria-hidden /> Add an item
-        </Button>
-      )}
+      {editMode ? (
+        addingItem ? (
+          <AddItemForm
+            tripId={bundle.trip.id}
+            dayId={day.id}
+            onCancel={() => setAddingItem(false)}
+            onAdded={() => {
+              setAddingItem(false);
+              // A new line carries no tags, so under an active filter it would land somewhere
+              // the user cannot see. Appearing to swallow what someone just typed is the one
+              // thing this must not do, so the filter gives way to the new item.
+              if (active.size > 0) {
+                params.delete('tags');
+                setParams(params, { replace: true });
+              }
+            }}
+          />
+        ) : (
+          <Button className="mt-2" onClick={() => setAddingItem(true)}>
+            <Plus size={15} aria-hidden /> Add an item
+          </Button>
+        )
+      ) : null}
     </>
   );
 }
@@ -689,6 +883,19 @@ export function ItemDetailPage() {
           </>
         }
       />
+
+      <div className="mb-3 flex items-center gap-2">
+        <CategoryIcon category={itemCategory(item.type)} />
+        {item.time ? (
+          <p className="text-sm font-semibold tabular-nums">
+            {item.timeApprox ? '~' : ''}
+            {item.time}
+            {item.timeEnd ? `–${item.timeEnd}` : ''}
+          </p>
+        ) : item.timeLabel ? (
+          <p className="text-sm text-slate-400 capitalize">{item.timeLabel}</p>
+        ) : null}
+      </div>
 
       {editing ? (
         <ItemEditForm

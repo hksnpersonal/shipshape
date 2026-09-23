@@ -13,7 +13,7 @@ import { nanoid } from 'nanoid';
 import { ExportFileSchema, validateBundleIntegrity } from '@/domain/schemas';
 import { findingStateId } from '@/lint/keys';
 import type { ExportFile, FindingState, ID, TripBundle } from '@/domain/types';
-import { db } from './db';
+import { TRIP_SCOPED_TABLES, db } from './db';
 import { loadTripBundle } from './repo';
 
 export const SCHEMA_VERSION = 1 as const;
@@ -261,18 +261,14 @@ export async function importTrip(
 
   await db.transaction('rw', db.tables, async () => {
     if (options.mode === 'replace') {
-      for (const name of [
-        'days',
-        'items',
-        'bookings',
-        'accommodations',
-        'documents',
-        'reminders',
-        'conflicts',
-        'findingStates',
-      ]) {
+      // Collect the document ids first. Deleting the metadata rows before reading them
+      // would leave the old bytes behind with nothing pointing at them, so a re-import
+      // would keep growing storage instead of replacing what was there.
+      const staleDocIds = (await db.documents.where('tripId').equals(tripId).primaryKeys()) as ID[];
+      for (const name of TRIP_SCOPED_TABLES) {
         await db.table(name).where('tripId').equals(tripId).delete();
       }
+      await db.documentBytes.bulkDelete(staleDocIds);
       await db.trips.delete(tripId);
     }
 

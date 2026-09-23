@@ -24,6 +24,6 @@ describe('the app on a fresh device', () => {
       expect(screen.getByRole('heading', { name: 'Europe 2026' })).toBeInTheDocument(),
     );
     expect(screen.getByText(/still to book/)).toBeInTheDocument();
-    expect(screen.getByText(/to resolve/)).toBeInTheDocument();
+    expect(screen.getByText(/Plan check/)).toBeInTheDocument();
   });
 });

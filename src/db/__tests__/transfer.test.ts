@@ -90,6 +90,44 @@ describe('import and export', () => {
     expect(exported.documents.every((d) => d.data === undefined)).toBe(true);
   });
 
+  it('replaces a trip in place, leaving one trip and its own documents behind, not two', async () => {
+    await importTrip(europe2026, { mode: 'replace' });
+    await documentsRepo.attach(TRIP_ID, new Blob(['x'], { type: 'application/pdf' }), {
+      name: 'boarding-pass.pdf',
+    });
+    const exported = await exportTrip(TRIP_ID, { includeDocuments: true });
+
+    // Re-importing the same file over itself is exactly what happens when the phone
+    // already has the sample trip and the traveller's own export shares its id.
+    const result = await importTrip(exported, { mode: 'replace' });
+
+    expect(await db.trips.count()).toBe(1);
+    expect(await db.documents.where('tripId').equals(TRIP_ID).count()).toBe(
+      exported.documents.length,
+    );
+    expect(result.counts.documents).toBe(exported.documents.length);
+  });
+
+  it('does not leave the old bytes behind when a replace brings in a different set of documents', async () => {
+    await importTrip(europe2026, { mode: 'replace' });
+    const staleDocId = await documentsRepo.attach(TRIP_ID, new Blob(['old']), {
+      name: 'old-ticket.pdf',
+    });
+
+    // A later export from the source device, once that document has been swapped for a
+    // fresh one with a new id - the shape a re-export genuinely takes over time.
+    const replacement = await exportTrip(TRIP_ID, { includeDocuments: true });
+    replacement.documents = replacement.documents
+      .filter((d) => d.id !== staleDocId)
+      .concat([{ ...replacement.documents[0]!, id: 'doc-fresh', name: 'new-ticket.pdf' }]);
+
+    await importTrip(replacement, { mode: 'replace' });
+
+    expect(await db.documentBytes.get(staleDocId)).toBeUndefined();
+    expect(await db.documents.get(staleDocId)).toBeUndefined();
+    expect(await db.documents.get('doc-fresh')).toBeDefined();
+  });
+
   it('brings a shared trip in alongside the original without colliding', async () => {
     await importTrip(europe2026, { mode: 'replace' });
     const shared = await exportTrip(TRIP_ID, { includeDocuments: false });

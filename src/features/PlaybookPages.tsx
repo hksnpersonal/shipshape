@@ -64,9 +64,21 @@ function leadTimeSentence(advice: BookAdvice): string {
   return `Book ${leadTimePhrase(advice).text} ahead`;
 }
 
-/** The one thing most worth a glance before booking, beyond when and where. */
-function watchForFact(guide: Guide): { text: string; tone: 'warn' | 'neutral' } {
+/**
+ * The one thing most worth a glance before booking, beyond when and where. `refundable`
+ * is the actual booking's own value, when known - it overrides the guide's generic
+ * fare-class text, which otherwise can flatly contradict the ticket someone already holds.
+ */
+function watchForFact(
+  guide: Guide,
+  refundable?: boolean | null,
+): { text: string; tone: 'warn' | 'neutral' | 'good' } {
   if (guide.validation?.required) return { text: 'Validation required', tone: 'warn' };
+  if (refundable != null) {
+    return refundable
+      ? { text: 'Refundable', tone: 'good' }
+      : { text: 'Non-refundable', tone: 'warn' };
+  }
   // Only the negative is safe to read off free text. "Depends on the seller" is not a
   // promise of a refund, so anything short of a clear "no" sends you to the rules instead.
   if (guide.refundRules) {
@@ -284,13 +296,25 @@ const TRUST_WORDS: Record<Reseller['trust'], string> = {
   avoid: 'Avoid',
 };
 
-/** The playbook entry rendered inline, used from a booking and from an item. */
-export function GuideCard({ guideId, hideTitle }: { guideId: string; hideTitle?: boolean }) {
+/**
+ * The playbook entry rendered inline, used from a booking and from an item. `refundable`
+ * lets a caller that knows the booking's own refund status override the guide's generic
+ * "Watch for" fact rather than let the two disagree.
+ */
+export function GuideCard({
+  guideId,
+  hideTitle,
+  refundable,
+}: {
+  guideId: string;
+  hideTitle?: boolean;
+  refundable?: boolean | null;
+}) {
   const guide = allGuides.find((g) => g.id === guideId);
   if (!guide) return null;
 
   const lead = leadTimePhrase(guide.bookAdvice);
-  const watch = watchForFact(guide);
+  const watch = watchForFact(guide, refundable);
 
   return (
     <Card className="mb-4">

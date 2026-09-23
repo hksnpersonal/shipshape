@@ -5,10 +5,27 @@
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { FileText, Trash2, Upload } from 'lucide-react';
-import { Button, Card, EmptyState, PageHeader, Section } from '@/components/ui';
+import {
+  Button,
+  Card,
+  CategoryIcon,
+  EmptyState,
+  PageHeader,
+  Section,
+  SearchInput,
+} from '@/components/ui';
+import { bookingCategory, itemCategory, type Category } from '@/domain/categories';
 import { documentsRepo } from '@/db/repo';
+import { formatDayLabel } from '@/domain/time';
 import { useTripBundle, useTripDocuments } from '@/hooks/useTrip';
-import type { DocumentKind, DocumentMeta, DocumentOwnerKind, ID, TripBundle } from '@/domain/types';
+import type {
+  DocumentKind,
+  DocumentMeta,
+  DocumentOwnerKind,
+  ID,
+  ISODate,
+  TripBundle,
+} from '@/domain/types';
 
 const KIND_WORDS: Record<DocumentKind, string> = {
   ticket: 'Ticket',
@@ -41,48 +58,132 @@ async function openDocument(id: ID): Promise<void> {
   window.setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_TTL_MS);
 }
 
-/** Who a document is filed against, in words, for the vault's own list. */
-function describeOwner(bundle: TripBundle, doc: DocumentMeta): string | null {
-  if (!doc.attachedTo) return null;
-  const { kind, id } = doc.attachedTo;
-  if (kind === 'booking') return bundle.bookings.find((b) => b.id === id)?.title ?? null;
-  if (kind === 'item') return bundle.items.find((i) => i.id === id)?.title ?? null;
-  if (kind === 'accommodation') {
-    return bundle.accommodations.find((a) => a.id === id)?.name ?? null;
-  }
-  return null;
+/** The vault's own sections: what a traveller thinks "this ticket belongs with", which is
+ * coarser than the app's own booking kinds and includes a bucket for things that are not
+ * filed against any one booking at all. */
+export type DocumentSection =
+  'Transport' | 'Hotels' | 'Sightseeing' | 'Passes' | 'Trip papers' | 'Other';
+
+const DOCUMENT_SECTION_ORDER: DocumentSection[] = [
+  'Transport',
+  'Hotels',
+  'Sightseeing',
+  'Passes',
+  'Trip papers',
+  'Other',
+];
+
+const CATEGORY_TO_SECTION: Partial<Record<Category, DocumentSection>> = {
+  transport: 'Transport',
+  stay: 'Hotels',
+  activity: 'Sightseeing',
+  pass: 'Passes',
+};
+
+export interface DocumentOwnerInfo {
+  /** The category badge to show, e.g. a hotel document gets the hotel icon. Falls back to
+   * the note icon for a trip-level document or one whose owner no longer exists. */
+  category: Category;
+  section: DocumentSection;
+  /** What to show after "for", e.g. a booking title. Null for a trip-level document. */
+  label: string | null;
+  /** The owner's date, for sorting and for the "· 12 Sep" after the label. */
+  date: ISODate | null;
 }
 
-/** One filed document, shown the same way in the vault and on a booking. */
-export function DocumentRow({ doc, ownerLabel }: { doc: DocumentMeta; ownerLabel?: string }) {
+/** What a document is filed against, and when that thing happens - the vault groups by
+ * `section` and sorts each group by `date`. */
+function ownerInfo(bundle: TripBundle, doc: DocumentMeta): DocumentOwnerInfo {
+  const attachedTo = doc.attachedTo;
+  if (!attachedTo || attachedTo.kind === 'trip') {
+    return { category: 'note', section: 'Trip papers', label: null, date: null };
+  }
+  if (attachedTo.kind === 'booking') {
+    const booking = bundle.bookings.find((b) => b.id === attachedTo.id);
+    if (!booking) return { category: 'note', section: 'Other', label: null, date: null };
+    const category = bookingCategory(booking.kind);
+    return {
+      category,
+      section: CATEGORY_TO_SECTION[category] ?? 'Other',
+      label: booking.title,
+      date: booking.date,
+    };
+  }
+  if (attachedTo.kind === 'accommodation') {
+    const stay = bundle.accommodations.find((a) => a.id === attachedTo.id);
+    if (!stay) return { category: 'note', section: 'Other', label: null, date: null };
+    return { category: 'stay', section: 'Hotels', label: stay.name, date: stay.checkIn };
+  }
+  // The last owner kind is an item, filed against a day rather than a booking.
+  const item = bundle.items.find((i) => i.id === attachedTo.id);
+  if (!item) return { category: 'note', section: 'Other', label: null, date: null };
+  const category = itemCategory(item.type);
+  const day = bundle.days.find((d) => d.id === item.dayId);
+  return {
+    category,
+    section: CATEGORY_TO_SECTION[category] ?? 'Other',
+    label: item.title,
+    date: day?.date ?? null,
+  };
+}
+
+/** One filed document, shown the same way in the vault and on a booking. `owner` is only
+ * passed by the vault, which knows what everything is filed against; a booking page shows
+ * its own documents plainly, since the owner is the page itself. */
+export function DocumentRow({
+  doc,
+  ownerLabel,
+  owner,
+}: {
+  doc: DocumentMeta;
+  /** @deprecated Pass `owner` instead, which also carries the category and date. */
+  ownerLabel?: string;
+  owner?: DocumentOwnerInfo;
+}) {
   const remove = async () => {
     if (!window.confirm(`Remove ${doc.name}? This cannot be undone.`)) return;
     await documentsRepo.remove(doc.id);
   };
+  const label = owner?.label ?? ownerLabel ?? null;
 
+  // The whole row opens the file: that is what it is for, and a large target is easier
+  // on a moving train. Removing is rare and destructive, so it gets a small icon and a
+  // confirmation rather than a button the same size as Open.
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-medium">{doc.name}</p>
-          <p className="text-sm text-slate-500">
-            {KIND_WORDS[doc.kind]} · {formatSize(doc.size)} · attached{' '}
-            {new Date(doc.createdAt).toLocaleDateString()}
-          </p>
-          {ownerLabel ? (
-            <p className="mt-0.5 text-xs text-slate-400">Filed against {ownerLabel}</p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button onClick={() => void openDocument(doc.id)}>
-            <FileText size={15} aria-hidden /> Open
-          </Button>
-          <Button variant="danger" onClick={() => void remove()}>
-            <Trash2 size={15} aria-hidden /> Remove
-          </Button>
-        </div>
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => void openDocument(doc.id)}
+          className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 rounded-l-xl p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50"
+        >
+          {owner ? (
+            <CategoryIcon category={owner.category} size="sm" />
+          ) : (
+            <FileText size={18} className="shrink-0 text-slate-400" aria-hidden />
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 block font-medium">{doc.name}</span>
+            <span className="block truncate text-xs text-slate-500">
+              {label ? `for ${label}` : KIND_WORDS[doc.kind]}
+              {owner?.date ? ` · ${formatDayLabel(owner.date)}` : ''}
+              {` · ${formatSize(doc.size)}`}
+            </span>
+          </span>
+          <span className="text-brand-700 dark:text-brand-300 shrink-0 text-sm font-medium">
+            Open
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void remove()}
+          className="flex min-h-[56px] shrink-0 items-center px-3 text-slate-400 hover:text-rose-600"
+        >
+          <Trash2 size={16} aria-hidden />
+          <span className="sr-only">Remove {doc.name}</span>
+        </button>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -158,8 +259,33 @@ export function DocumentsVaultPage() {
   const { tripId } = useParams();
   const bundle = useTripBundle(tripId);
   const documents = useTripDocuments(tripId);
+  const [query, setQuery] = useState('');
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
+
+  const owners = new Map(documents.map((doc) => [doc.id, ownerInfo(bundle, doc)]));
+
+  const q = query.trim().toLowerCase();
+  const matching = q
+    ? documents.filter((doc) => {
+        const label = owners.get(doc.id)?.label ?? '';
+        return doc.name.toLowerCase().includes(q) || label.toLowerCase().includes(q);
+      })
+    : documents;
+
+  const sections = DOCUMENT_SECTION_ORDER.map((section) => ({
+    section,
+    items: matching
+      .filter((doc) => owners.get(doc.id)?.section === section)
+      .sort((a, b) => {
+        const dateA = owners.get(a.id)?.date;
+        const dateB = owners.get(b.id)?.date;
+        if (dateA && dateB) return dateA.localeCompare(dateB);
+        if (dateA) return -1;
+        if (dateB) return 1;
+        return a.name.localeCompare(b.name);
+      }),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -183,17 +309,27 @@ export function DocumentsVaultPage() {
           travels with an export.
         </EmptyState>
       ) : (
-        <Section title={`${documents.length} filed`}>
-          <div className="space-y-2">
-            {documents.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
-                ownerLabel={describeOwner(bundle, doc) ?? undefined}
-              />
-            ))}
-          </div>
-        </Section>
+        <>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder="Search by name or what it's for"
+            label="Search documents"
+          />
+          {sections.length === 0 ? (
+            <EmptyState title="Nothing matches that search." />
+          ) : (
+            sections.map(({ section, items }) => (
+              <Section key={section} title={`${section} (${items.length})`}>
+                <div className="space-y-2">
+                  {items.map((doc) => (
+                    <DocumentRow key={doc.id} doc={doc} owner={owners.get(doc.id)} />
+                  ))}
+                </div>
+              </Section>
+            ))
+          )}
+        </>
       )}
     </>
   );

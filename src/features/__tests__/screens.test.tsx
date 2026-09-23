@@ -63,6 +63,8 @@ describe('the day timeline', () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
     await screen.findByText('TGV Lyria to Paris');
 
+    // The tag filter is edit machinery, hidden until asked for.
+    await user.click(screen.getByRole('button', { name: 'Edit day' }));
     await user.click(screen.getByRole('button', { name: /CONFLICT/ }));
 
     await waitFor(() => {
@@ -77,6 +79,8 @@ describe('the day timeline', () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
     await screen.findByText('TGV Lyria to Paris');
 
+    // Done/skip is edit machinery, hidden until asked for.
+    await user.click(screen.getByRole('button', { name: 'Edit day' }));
     const buttons = screen.getAllByRole('button', { name: 'Mark as done' });
     const first = buttons[0];
     expect(first).toBeDefined();
@@ -90,11 +94,14 @@ describe('the day timeline', () => {
 });
 
 describe('the conflict inbox', () => {
-  it('leads with what cannot happen and keeps observations out of the way', async () => {
+  it('renames itself Plan check and groups findings by day, minor notes hidden', async () => {
     renderAt(`/t/${TRIP}/conflicts`);
-    expect(await screen.findByRole('heading', { name: /Blocked/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Check/ })).toBeInTheDocument();
-    expect(screen.getByText(/Smaller observations/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Plan check' })).toBeInTheDocument();
+    expect(screen.getByText(/None of them stop the trip/)).toBeInTheDocument();
+    // Paris day 16 has an error on it, so its group is named for the day and open by default.
+    expect(await screen.findByText('Sun 11 Oct · Paris')).toBeInTheDocument();
+    // Info-severity findings start hidden behind the toggle.
+    expect(screen.getByRole('button', { name: /Show minor notes/ })).toBeInTheDocument();
   });
 
   it('shows the stale Paris arrival as a finding with a fix', async () => {
@@ -111,6 +118,8 @@ describe('the conflict inbox', () => {
       /TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/,
     );
     const card = heading.closest('div.rounded-xl') as HTMLElement;
+    // Compact by default: expand the finding to reach its actions.
+    await user.click(heading);
     await user.click(within(card).getByRole('button', { name: /Sorted/ }));
 
     await waitFor(() => {
@@ -147,9 +156,12 @@ describe('nothing is a dead end', () => {
   });
 
   it('offers a way into the documents vault from the trip home', async () => {
+    // "Documents" now also names a nav tab (rendered twice, desktop and mobile) and a
+    // welcome-card line, so several elements carry the word - any one linking there is enough.
     renderAt(`/t/${TRIP}`);
-    const vault = await screen.findByText('Documents');
-    expect(vault.closest('a')).toHaveAttribute('href', `/t/${TRIP}/documents`);
+    const vaults = await screen.findAllByText('Documents');
+    const links = vaults.map((el) => el.closest('a'));
+    expect(links.some((a) => a?.getAttribute('href') === `/t/${TRIP}/documents`)).toBe(true);
   });
 });
 
@@ -256,7 +268,7 @@ describe('filing a document from a booking', () => {
 
     renderAt(`/t/${TRIP}/documents`);
     expect(await screen.findByText('tgv-ticket.pdf')).toBeInTheDocument();
-    expect(screen.getByText(/Filed against TGV Lyria, Basel to Paris/)).toBeInTheDocument();
+    expect(screen.getByText(/for TGV Lyria, Basel to Paris/)).toBeInTheDocument();
   });
 });
 
@@ -410,6 +422,8 @@ describe('adding an item', () => {
     await screen.findByText('Leonardo Express to Roma Termini');
 
     const user = userEvent.setup();
+    // "Add an item" is edit machinery, hidden until asked for.
+    await user.click(screen.getByRole('button', { name: 'Edit day' }));
     await user.click(screen.getByRole('button', { name: 'Add an item' }));
     await user.type(screen.getByLabelText('Title'), 'Buy gelato');
     await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -428,6 +442,8 @@ describe('adding an item', () => {
     await screen.findByText('Leonardo Express to Roma Termini');
 
     const user = userEvent.setup();
+    // The tag filter and "Add an item" are both edit machinery, hidden until asked for.
+    await user.click(screen.getByRole('button', { name: 'Edit day' }));
     await user.click(screen.getByRole('button', { name: /MUST/ }));
     await waitFor(() => {
       expect(screen.queryByText('Leonardo Express to Roma Termini')).not.toBeInTheDocument();
@@ -447,6 +463,8 @@ describe('adding an item', () => {
     await screen.findByText('Leonardo Express to Roma Termini');
 
     const user = userEvent.setup();
+    // "Add an item" is edit machinery, hidden until asked for.
+    await user.click(screen.getByRole('button', { name: 'Edit day' }));
     await user.click(screen.getByRole('button', { name: 'Add an item' }));
     await user.type(screen.getByLabelText('Title'), 'Buy stamps');
     await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -463,6 +481,8 @@ describe('adding an item', () => {
     const before = await db.items.where('dayId').equals(DAY_ID).count();
 
     const user = userEvent.setup();
+    // "Add an item" is edit machinery, hidden until asked for.
+    await user.click(screen.getByRole('button', { name: 'Edit day' }));
     await user.click(screen.getByRole('button', { name: 'Add an item' }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
@@ -508,7 +528,7 @@ describe('deleting an item', () => {
     // A fresh mount, not the same live subtree: proves the plan re-checks itself when a
     // line goes, not only when one changes.
     renderAt(`/t/${TRIP}/conflicts`);
-    await screen.findByRole('heading', { name: /Blocked/ });
+    await screen.findByRole('heading', { name: 'Plan check' });
     expect(
       screen.queryByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
     ).not.toBeInTheDocument();
@@ -541,8 +561,11 @@ describe('adding a booking', () => {
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-10' } });
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
-    const heading = await screen.findByText('Ferry to Bellagio');
-    expect(heading.closest('section')?.querySelector('h2')).toHaveTextContent('Still to book');
+    await screen.findAllByText('Ferry to Bellagio');
+    // The board groups by date, not status, so "still needs booking" is a callout at the
+    // top rather than a section of its own.
+    const callout = screen.getByText(/Still to book \(\d+\)/).closest('div') as HTMLElement;
+    expect(within(callout).getByText('Ferry to Bellagio')).toBeInTheDocument();
 
     const stored = (await db.bookings.toArray()).find((b) => b.title === 'Ferry to Bellagio');
     expect(stored?.tripId).toBe(TRIP);
@@ -559,7 +582,7 @@ describe('adding a booking', () => {
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
-    await screen.findByText('Airport transfer');
+    await screen.findAllByText('Airport transfer');
     const stored = (await db.bookings.toArray()).find((b) => b.title === 'Airport transfer');
     expect(stored?.status).toBe('to_book');
   });
@@ -649,9 +672,9 @@ describe('linking a booking to an item', () => {
     // A fresh mount of the day, where a traveller actually reads their plan - not the
     // item detail screen the link was made on.
     renderAt(`/t/${TRIP}/days/${TRIP}-d01`);
-    const link = await screen.findByRole('link', { name: 'Leonardo Express to Roma Termini' });
+    const link = await screen.findByRole('link', { name: /Leonardo Express to Roma Termini/ });
     const row = link.closest('div.rounded-xl') as HTMLElement;
-    expect(within(row).getByText('booked')).toBeInTheDocument();
+    expect(within(row).getByText('Booked')).toBeInTheDocument();
   });
 
   it('leaves the booking itself untouched when unlinked', async () => {

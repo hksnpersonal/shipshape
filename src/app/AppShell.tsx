@@ -3,9 +3,16 @@
  * is a bottom bar on a phone and a side rail on a laptop.
  */
 import { NavLink, Outlet, useParams } from 'react-router';
-import { CalendarDays, Inbox, Map, Settings, Ticket } from 'lucide-react';
+import {
+  CalendarDays,
+  FolderOpen,
+  Home,
+  Map,
+  MoreHorizontal,
+  Settings,
+  Ticket,
+} from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
 
 interface NavItem {
   to: string;
@@ -14,7 +21,7 @@ interface NavItem {
   badge?: number;
 }
 
-function navItems(tripId: string | undefined, openFindings: number): NavItem[] {
+function navItems(tripId: string | undefined): NavItem[] {
   if (!tripId) {
     return [
       { to: '/', label: 'Trips', icon: Map },
@@ -23,20 +30,17 @@ function navItems(tripId: string | undefined, openFindings: number): NavItem[] {
     ];
   }
   return [
-    { to: `/t/${tripId}`, label: 'Trip', icon: Map },
+    { to: `/t/${tripId}`, label: 'Home', icon: Home },
     { to: `/t/${tripId}/days`, label: 'Days', icon: CalendarDays },
     { to: `/t/${tripId}/bookings`, label: 'Bookings', icon: Ticket },
-    { to: `/t/${tripId}/conflicts`, label: 'Inbox', icon: Inbox, badge: openFindings },
-    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: `/t/${tripId}/documents`, label: 'Documents', icon: FolderOpen },
+    { to: '/settings', label: 'More', icon: MoreHorizontal },
   ];
 }
 
 export function AppShell() {
   const { tripId } = useParams();
-  const bundle = useTripBundle(tripId);
-  const today = useToday(bundle?.trip.defaultTimeZone);
-  const audit = useAudit(bundle, today);
-  const items = navItems(tripId, audit.counts.actionable);
+  const items = navItems(tripId);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 md:flex dark:bg-slate-900 dark:text-slate-100">

@@ -1,15 +1,29 @@
 /**
  * Trips list, trip home, and the day index.
  *
- * The trip home answers the two questions a traveller actually has before departure:
- * what do I have to book this week, and what is wrong with the plan. It answers them in
- * numbers you can tap rather than sentences you have to read.
+ * The trip home answers the questions a first-time traveller actually has before they
+ * know their way around the app: where am I going, what's next, where do I sleep tonight,
+ * and where are my tickets. Everything else - what still needs booking, what is worth a
+ * second look - is one compact row, not a dashboard.
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { BookOpen, Bell, CalendarDays, Check, Copy, FolderOpen, Map, Sunrise } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bell,
+  BookOpen,
+  Check,
+  Copy,
+  FolderOpen,
+  Info,
+  Map as MapIcon,
+  Sunrise,
+  X,
+} from 'lucide-react';
 import {
   Button,
+  Card,
+  CategoryIcon,
   Chip,
   EmptyState,
   LinkCard,
@@ -17,14 +31,20 @@ import {
   PageHeader,
   Row,
   Section,
-  SeverityChip,
-  StatTile,
 } from '@/components/ui';
-import { itemsForDay, orderedDays } from '@/domain/bundle';
+import { cn } from '@/lib/cn';
+import { accommodationForDate, dayForDate, itemsForDay, orderedDays } from '@/domain/bundle';
 import { daysBetween, formatDayLabel } from '@/domain/time';
-import { useAudit, useBookBy, useToday, useTripBundle, useTrips } from '@/hooks/useTrip';
-import type { BookByEntry } from '@/playbook/bookBy';
-import type { Essential } from '@/domain/types';
+import { useAudit, useToday, useTripBundle, useTrips } from '@/hooks/useTrip';
+import { CATEGORY_META, bookingCategory, itemCategory, type Category } from '@/domain/categories';
+import type {
+  Accommodation,
+  Booking,
+  BookingKind,
+  Day,
+  Essential,
+  TripBundle,
+} from '@/domain/types';
 
 export function TripsListPage() {
   const trips = useTrips();
@@ -45,7 +65,7 @@ export function TripsListPage() {
         {trips.map((trip) => (
           <Row
             key={trip.id}
-            icon={Map}
+            icon={MapIcon}
             to={`/t/${trip.id}`}
             title={trip.name}
             meta={`${formatDayLabel(trip.startDate)} to ${formatDayLabel(trip.endDate)}`}
@@ -57,47 +77,281 @@ export function TripsListPage() {
   );
 }
 
-function urgencyTone(entry: BookByEntry) {
-  if (entry.result.urgency === 'overdue') return 'bad' as const;
-  if (entry.result.urgency === 'now') return 'warn' as const;
-  return 'neutral' as const;
-}
+const WELCOME_DISMISSED_KEY = 'shipshape:home-welcome-dismissed';
 
-function urgencyWords(entry: BookByEntry): string {
-  const { urgency, daysLeft } = entry.result;
-  if (urgency === 'overdue') return `${Math.abs(daysLeft ?? 0)}d late`;
-  if (urgency === 'now') return `${daysLeft}d left`;
-  if (urgency === 'soon') return `in ${daysLeft}d`;
-  return urgency;
+/** localStorage can throw (private browsing, a full quota); the card just re-shows next time. */
+function readWelcomeDismissed(): boolean {
+  try {
+    return localStorage.getItem(WELCOME_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 /**
- * The three side rooms. They used to carry a sentence each explaining what they were for;
- * an icon and a count say the same thing and leave the screen to the trip.
+ * The one-time tour. It used to be a README nobody opened; now it is the first thing on
+ * the screen, and it gets out of the way for good once it has been read.
  */
-function SideRooms({ tripId, reminders }: { tripId: string; reminders: number }) {
-  const rooms = [
-    { to: `/t/${tripId}/reminders`, icon: Bell, label: 'Reminders', count: reminders },
-    { to: `/t/${tripId}/documents`, icon: FolderOpen, label: 'Documents' },
-    { to: '/playbook', icon: BookOpen, label: 'Playbook' },
-  ];
+function WelcomeCard() {
+  const [dismissed, setDismissed] = useState(readWelcomeDismissed);
+  if (dismissed) return null;
+
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
+    } catch {
+      // Not remembered, but dismissed for this session either way.
+    }
+  };
+
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {rooms.map((room) => (
-        <Link
-          key={room.to}
-          to={room.to}
-          className="hover:border-brand-400 relative flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800"
+    <Card className="mb-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold">How this app works</p>
+          {/* One sentence per line rather than a bold label: a label matching "Documents"
+              or "Home" word for word would be indistinguishable from the nav item of the
+              same name to anything - assistive tech included - that looks for exact text. */}
+          <ul className="mt-1.5 space-y-1 text-sm text-slate-500 dark:text-slate-400">
+            <li>Home is the overview.</li>
+            <li>Days is what to do each day.</li>
+            <li>Bookings is tickets and hotels by type.</li>
+            <li>Documents is your PDFs.</li>
+          </ul>
+          <p className="mt-1.5 text-xs text-slate-400">Works offline.</p>
+        </div>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Dismiss"
+          className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
         >
-          <room.icon size={20} className="text-slate-400" aria-hidden />
-          <span className="text-xs font-medium">{room.label}</span>
-          {room.count ? (
-            <span className="bg-brand-600 absolute top-2 right-2 rounded-full px-1.5 text-[10px] font-semibold text-white">
-              {room.count}
-            </span>
-          ) : null}
-        </Link>
-      ))}
+          <X size={16} aria-hidden />
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+/** Words for the countdown a first-time traveller actually reads, not a signed integer. */
+function tripTimingWords(daysAway: number, dayNumber: number, totalDays: number): string {
+  if (daysAway > 1) return `Starts in ${daysAway} days`;
+  if (daysAway === 1) return 'Tomorrow';
+  if (daysAway === 0) return 'You leave today';
+  return `Day ${dayNumber} of ${totalDays}`;
+}
+
+/** `Sat 26 Sep` -> `26 Sep`: the weekday earns its place on a day row, not a route summary. */
+function shortDate(date: string): [day: string, month: string] {
+  const [, day, month] = formatDayLabel(date).split(' ');
+  return [day ?? '', month ?? ''];
+}
+
+/** `26–29 Sep`, or `30 Sep – 1 Oct` across a month boundary. */
+function formatStopRange(checkIn: string, checkOut: string): string {
+  const [inDay, inMonth] = shortDate(checkIn);
+  const [outDay, outMonth] = shortDate(checkOut);
+  if (inMonth === outMonth) return `${inDay}–${outDay} ${inMonth}`;
+  return `${inDay} ${inMonth} – ${outDay} ${outMonth}`;
+}
+
+/** `international-train` -> `International train`. Sentence case, not a slug. */
+function kindWords(kind: BookingKind): string {
+  return kind.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
+/** The transport booking that moves the trip on a given date, if one has been booked. */
+function transportBookingOn(bundle: TripBundle, date: string): Booking | undefined {
+  return bundle.bookings
+    .filter((b) => bookingCategory(b.kind) === 'transport' && b.date === date)
+    .sort((a, b) => (a.depart ?? '').localeCompare(b.depart ?? ''))[0];
+}
+
+/** e.g. `Train · Frecciarossa 08:35`, read between one stop and the next. */
+function connectorLabel(booking: Booking): string {
+  const service = booking.title.split(',')[0];
+  const time = booking.depart ? ` ${booking.depart}` : '';
+  return `${kindWords(booking.kind)} · ${service}${time}`;
+}
+
+function ConnectorLine({ booking }: { booking: Booking }) {
+  return (
+    <p className="border-l border-dashed border-slate-300 py-1 pl-[1.6rem] text-xs text-slate-400 dark:border-slate-600 dark:text-slate-500">
+      {connectorLabel(booking)}
+    </p>
+  );
+}
+
+/**
+ * Accommodations in check-in order: the stops the route, and the day list, are both built
+ * from. A stop's nights run `checkIn` inclusive to `checkOut` exclusive - the checkout day
+ * belongs to whatever comes next, hotel or home.
+ */
+function tripStops(bundle: TripBundle): Accommodation[] {
+  return bundle.accommodations.slice().sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+}
+
+/**
+ * The trip at a glance: one row per bed slept in, in order, with the leg that moved you
+ * between them. Day trips (a day whose city changes but the hotel doesn't) never appear -
+ * stops follow accommodation, not the day list.
+ */
+function RouteSection({ bundle, tripId }: { bundle: TripBundle; tripId: string }) {
+  const stops = tripStops(bundle);
+  if (stops.length === 0) return null;
+
+  const firstDayDate = orderedDays(bundle)[0]?.date;
+  const connectorBefore = firstDayDate ? transportBookingOn(bundle, firstDayDate) : undefined;
+  const lastStop = stops[stops.length - 1] as Accommodation;
+  const connectorAfter = transportBookingOn(bundle, lastStop.checkOut);
+
+  return (
+    <Section title="Your route">
+      <div className="space-y-1.5">
+        {connectorBefore ? <ConnectorLine booking={connectorBefore} /> : null}
+        {stops.map((stop, index) => {
+          const firstDay = dayForDate(bundle, stop.checkIn);
+          const nights = daysBetween(stop.checkIn, stop.checkOut);
+          const next = stops[index + 1];
+          const connector = next ? transportBookingOn(bundle, next.checkIn) : undefined;
+          return (
+            <div key={stop.id}>
+              <Row
+                icon={CATEGORY_META.stay.icon}
+                to={firstDay ? `/t/${tripId}/days/${firstDay.id}` : undefined}
+                title={stop.place.city ?? stop.place.name}
+                meta={`${formatStopRange(stop.checkIn, stop.checkOut)} · ${nights} night${nights === 1 ? '' : 's'} · ${stop.name}`}
+              />
+              {connector ? <ConnectorLine booking={connector} /> : null}
+            </div>
+          );
+        })}
+        {connectorAfter ? <ConnectorLine booking={connectorAfter} /> : null}
+      </div>
+    </Section>
+  );
+}
+
+/** The day itself, today or the next one, with the two or three things that happen in it. */
+function NextUpCard({
+  bundle,
+  tripId,
+  current,
+  day,
+}: {
+  bundle: TripBundle;
+  tripId: string;
+  current: boolean;
+  day: Day;
+}) {
+  const items = itemsForDay(bundle, day.id)
+    .filter((item) => item.time)
+    .slice(0, 3);
+  const tonight = accommodationForDate(bundle, day.date);
+
+  return (
+    <Section title={current ? 'Today' : 'Next up'}>
+      <LinkCard to={`/t/${tripId}/days/${day.id}`}>
+        <p className="font-semibold">
+          {formatDayLabel(day.date)} · {day.city}
+        </p>
+        {day.theme ? <p className="text-sm text-slate-500">{day.theme}</p> : null}
+        {items.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 text-sm">
+                <CategoryIcon category={itemCategory(item.type)} size="sm" />
+                <span className="text-slate-400 tabular-nums">{item.time}</span>
+                <span className="truncate">{item.title}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {tonight ? (
+          <p className="mt-3 text-sm text-slate-500">{`Tonight: ${tonight.name}`}</p>
+        ) : null}
+      </LinkCard>
+    </Section>
+  );
+}
+
+function TileIcon({ icon: Icon }: { icon: typeof MapIcon }) {
+  return (
+    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+      <Icon size={18} aria-hidden />
+    </span>
+  );
+}
+
+interface QuickTile {
+  key: string;
+  label: string;
+  to: string;
+  category?: Category;
+  icon?: typeof MapIcon;
+}
+
+/** One tap from a category on Home to the filtered list of it on Bookings, or the vault. */
+function QuickTiles({ tripId }: { tripId: string }) {
+  const tiles: QuickTile[] = [
+    {
+      key: 'transport',
+      label: 'Transport',
+      to: `/t/${tripId}/bookings?category=transport`,
+      category: 'transport',
+    },
+    { key: 'stay', label: 'Hotels', to: `/t/${tripId}/bookings?category=stay`, category: 'stay' },
+    {
+      key: 'activity',
+      label: 'Sightseeing',
+      to: `/t/${tripId}/bookings?category=activity`,
+      category: 'activity',
+    },
+    { key: 'food', label: 'Food', to: `/t/${tripId}/bookings?category=food`, category: 'food' },
+    { key: 'documents', label: 'Documents', to: `/t/${tripId}/documents`, icon: FolderOpen },
+    { key: 'essentials', label: 'Essentials', to: '#essentials', icon: Info },
+  ];
+  const tileClass =
+    'hover:border-brand-400 flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800';
+  return (
+    <div className="mb-6 grid grid-cols-3 gap-3">
+      {tiles.map((tile) =>
+        tile.category ? (
+          <Link key={tile.key} to={tile.to} className={tileClass}>
+            <CategoryIcon category={tile.category} />
+            <span className="text-xs font-medium">{tile.label}</span>
+          </Link>
+        ) : (
+          // A plain anchor jumps to the Essentials card in place; a router Link would not.
+          <a key={tile.key} href={tile.to} className={cn(tileClass, 'no-underline')}>
+            <TileIcon icon={tile.icon ?? Info} />
+            <span className="text-xs font-medium">{tile.label}</span>
+          </a>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** The two pages Home used to be the only door to. Small enough not to compete with it. */
+function MoreLinks({ tripId }: { tripId: string }) {
+  return (
+    <div className="mb-6 flex gap-4 text-sm">
+      <Link
+        to={`/t/${tripId}/reminders`}
+        className="text-brand-700 dark:text-brand-300 inline-flex items-center gap-1.5 font-medium"
+      >
+        <Bell size={14} aria-hidden />
+        Reminders
+      </Link>
+      <Link
+        to="/playbook"
+        className="text-brand-700 dark:text-brand-300 inline-flex items-center gap-1.5 font-medium"
+      >
+        <BookOpen size={14} aria-hidden />
+        Playbook
+      </Link>
     </div>
   );
 }
@@ -158,7 +412,6 @@ export function TripHomePage() {
   const bundle = useTripBundle(tripId);
   const today = useToday(bundle?.trip.defaultTimeZone);
   const audit = useAudit(bundle, today);
-  const bookBy = useBookBy(bundle, today);
 
   if (bundle === undefined) return <p className="text-slate-500">Loading.</p>;
   if (!bundle) return <EmptyState title="That trip is not on this device." />;
@@ -166,26 +419,18 @@ export function TripHomePage() {
   const { trip } = bundle;
   const daysAway = daysBetween(today, trip.startDate);
   const days = orderedDays(bundle);
-  const currentDay = days.find((d) => d.date === today);
+  const todayIndex = days.findIndex((d) => d.date === today);
+  const currentDay = todayIndex >= 0 ? days[todayIndex] : undefined;
   const nextDay = currentDay ?? days.find((d) => d.date > today);
-  const needAttention = bookBy.filter(
-    (e) => e.result.urgency === 'overdue' || e.result.urgency === 'now',
-  );
-  const soon = bookBy.filter((e) => e.result.urgency === 'soon').slice(0, 3);
-  const pendingReminders = bundle.reminders.filter((r) => r.status === 'pending').length;
   const toBook = bundle.bookings.filter((b) => b.status === 'to_book').length;
 
   return (
     <>
+      <WelcomeCard />
+
       <PageHeader
         title={trip.name}
-        subtitle={
-          daysAway > 0
-            ? `${daysAway} days to go`
-            : daysAway === 0
-              ? 'You leave today'
-              : `Day ${1 - daysAway}`
-        }
+        subtitle={tripTimingWords(daysAway, todayIndex + 1, days.length)}
       />
 
       {trip.travellerNames?.length ? (
@@ -194,94 +439,140 @@ export function TripHomePage() {
         </p>
       ) : null}
 
-      <div className="mb-6 grid grid-cols-3 gap-3">
-        <StatTile
-          value={audit.counts.actionable}
-          label="to resolve"
-          tone="bad"
-          to={`/t/${trip.id}/conflicts`}
-        />
-        <StatTile value={toBook} label="still to book" tone="warn" to={`/t/${trip.id}/bookings`} />
-        <StatTile value={bundle.items.length} label="planned" to={`/t/${trip.id}/days`} />
-      </div>
+      {bundle.documents.length === 0 ? (
+        <LinkCard to="/settings" className="mb-4 border-amber-300 dark:border-amber-700">
+          <p className="font-medium">Your tickets aren&apos;t loaded yet</p>
+          <p className="text-sm text-slate-500">Import your trip file in More →</p>
+        </LinkCard>
+      ) : null}
 
       {nextDay ? (
-        <Section title={currentDay ? 'Today' : 'Next'}>
-          <LinkCard to={`/t/${trip.id}/days/${nextDay.id}`}>
-            <p className="font-semibold">
-              {formatDayLabel(nextDay.date)} in {nextDay.city}
-            </p>
-            {nextDay.theme ? <p className="text-sm text-slate-500">{nextDay.theme}</p> : null}
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-              <CalendarDays size={13} aria-hidden />
-              {itemsForDay(bundle, nextDay.id).length} items
-            </p>
-          </LinkCard>
-        </Section>
+        <NextUpCard bundle={bundle} tripId={trip.id} current={Boolean(currentDay)} day={nextDay} />
       ) : null}
 
-      {needAttention.length > 0 ? (
-        <Section title="Book now">
-          <div className="space-y-2">
-            {needAttention.slice(0, 4).map((entry) => (
-              <Row
-                key={entry.booking.id}
-                to={`/t/${trip.id}/bookings/${entry.booking.id}`}
-                title={entry.booking.title}
-                meta={`by ${entry.result.date}`}
-                tone={entry.result.urgency === 'overdue' ? 'urgent' : 'default'}
-                trailing={<Chip tone={urgencyTone(entry)}>{urgencyWords(entry)}</Chip>}
-              />
-            ))}
-          </div>
-        </Section>
+      <RouteSection bundle={bundle} tripId={trip.id} />
+
+      <QuickTiles tripId={trip.id} />
+
+      {trip.essentials?.length ? (
+        <div id="essentials">
+          <EssentialsCard essentials={trip.essentials} />
+        </div>
       ) : null}
 
-      {soon.length > 0 ? (
-        <Section title="Coming up">
-          <div className="space-y-2">
-            {soon.map((entry) => (
-              <Row
-                key={entry.booking.id}
-                to={`/t/${trip.id}/bookings/${entry.booking.id}`}
-                title={entry.booking.title}
-                trailing={<Chip>{urgencyWords(entry)}</Chip>}
-              />
-            ))}
-          </div>
-        </Section>
+      {toBook > 0 ? (
+        <Link
+          to={`/t/${trip.id}/bookings`}
+          className="hover:border-brand-400 mb-2 block rounded-xl border border-slate-200 bg-white p-3 text-sm font-medium shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800"
+        >
+          {toBook} thing{toBook === 1 ? '' : 's'} still to book →
+        </Link>
       ) : null}
 
       {audit.counts.actionable > 0 ? (
-        <Section title="Problems">
-          <div className="space-y-2">
-            {audit.open
-              .filter((f) => f.severity === 'error')
-              .slice(0, 3)
-              .map((finding) => (
-                <Row
-                  key={finding.key}
-                  to={`/t/${trip.id}/conflicts`}
-                  title={finding.title}
-                  meta={finding.date ?? 'Whole trip'}
-                  tone="urgent"
-                  trailing={<SeverityChip severity="error" compact />}
-                />
-              ))}
-            <Link
-              to={`/t/${trip.id}/conflicts`}
-              className="text-brand-700 dark:text-brand-300 block px-1 text-sm font-medium"
-            >
-              All {audit.counts.actionable} findings
-            </Link>
-          </div>
-        </Section>
+        <Link
+          to={`/t/${trip.id}/conflicts`}
+          className="hover:border-brand-400 mb-4 block rounded-xl border border-slate-200 bg-white p-3 text-sm font-medium shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800"
+        >
+          Plan check: {audit.counts.actionable} thing{audit.counts.actionable === 1 ? '' : 's'}{' '}
+          worth a look →
+        </Link>
       ) : null}
 
-      {trip.essentials?.length ? <EssentialsCard essentials={trip.essentials} /> : null}
-
-      <SideRooms tripId={trip.id} reminders={pendingReminders} />
+      <MoreLinks tripId={trip.id} />
     </>
+  );
+}
+
+interface DayGroup {
+  key: string;
+  /** Undefined for the travel days before the first stay or after the last. */
+  stop?: Accommodation;
+  days: Day[];
+}
+
+/**
+ * The day list, grouped the way the route is: one block per stay, in check-in order, plus
+ * a block for whatever falls outside every stay (the outbound flight day, the day home).
+ * Consecutive days sharing a stop merge into one group; a run of unstopped days does too,
+ * since only adjacency (not the shared `undefined` stop) decides where a group ends.
+ */
+function groupDaysByStay(bundle: TripBundle): DayGroup[] {
+  const stops = tripStops(bundle);
+  const groups: DayGroup[] = [];
+  for (const day of orderedDays(bundle)) {
+    const stop = stops.find((s) => day.date >= s.checkIn && day.date < s.checkOut);
+    const key = stop?.id ?? 'travel';
+    const last = groups[groups.length - 1];
+    if (last?.key === key) {
+      last.days.push(day);
+    } else {
+      groups.push({ key, stop, days: [day] });
+    }
+  }
+  return groups;
+}
+
+function StayBlockHeading({ stop }: { stop: Accommodation }) {
+  return (
+    <div className="mb-1.5 flex items-center gap-2 px-1">
+      <CategoryIcon category="stay" size="sm" />
+      <p className="text-sm font-semibold">
+        {stop.place.city ?? stop.place.name} · {formatStopRange(stop.checkIn, stop.checkOut)} ·{' '}
+        {stop.name}
+      </p>
+    </div>
+  );
+}
+
+function TravelBlockHeading({ count }: { count: number }) {
+  return (
+    <p className="mb-1.5 px-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
+      {count === 1 ? 'Travel day' : 'Travel days'}
+    </p>
+  );
+}
+
+/** One ~48px row: which day it is, the date, where it happens, and whether it needs a look. */
+function DayRow({
+  tripId,
+  day,
+  index,
+  today,
+  dayTripCity,
+  hasError,
+}: {
+  tripId: string;
+  day: Day;
+  index: number;
+  today: string;
+  dayTripCity: string | null;
+  hasError: boolean;
+}) {
+  return (
+    <Row
+      to={`/t/${tripId}/days/${day.id}`}
+      title={
+        <>
+          <span className="mr-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-500 tabular-nums dark:bg-slate-700 dark:text-slate-300">
+            {index}
+          </span>
+          {formatDayLabel(day.date)}
+          {day.date === today ? (
+            <span className="text-brand-600 dark:text-brand-400 ml-2 text-xs font-bold">TODAY</span>
+          ) : null}
+        </>
+      }
+      meta={dayTripCity ? `Day trip to ${dayTripCity}` : day.theme}
+      trailing={
+        hasError ? (
+          <span title="Needs a look">
+            <AlertTriangle size={15} className="text-rose-500 dark:text-rose-400" aria-hidden />
+            <span className="sr-only">Needs a look</span>
+          </span>
+        ) : null
+      }
+    />
   );
 }
 
@@ -293,6 +584,11 @@ export function DaysIndexPage() {
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const days = orderedDays(bundle);
+  const dayIndex = new Map(days.map((day, index) => [day.id, index]));
+  const errorDayIds = new Set(
+    audit.open.filter((f) => f.severity === 'error' && f.dayId).map((f) => f.dayId),
+  );
+  const groups = groupDaysByStay(bundle);
 
   return (
     <>
@@ -308,49 +604,30 @@ export function DaysIndexPage() {
           </Link>
         }
       />
-      <div className="space-y-2">
-        {days.map((day, index) => {
-          const items = itemsForDay(bundle, day.id);
-          const problems = audit.open.filter((f) => f.dayId === day.id);
-          const worst = problems.some((p) => p.severity === 'error')
-            ? 'error'
-            : problems.some((p) => p.severity === 'warning')
-              ? 'warning'
-              : 'info';
-          // The day number orients better than a repeated pin icon would, and the label the
-          // notes originally carried stays reachable rather than being dropped for brevity.
-          const meta = [day.theme, day.originalLabel ? `was "${day.originalLabel}"` : null]
-            .filter(Boolean)
-            .join(' · ');
+      <div className="space-y-4">
+        {groups.map((group) => {
+          const stopCity = group.stop ? (group.stop.place.city ?? group.stop.place.name) : null;
           return (
-            <Row
-              key={day.id}
-              to={`/t/${bundle.trip.id}/days/${day.id}`}
-              title={
-                <>
-                  <span className="mr-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-500 tabular-nums dark:bg-slate-700 dark:text-slate-300">
-                    {index}
-                  </span>
-                  {formatDayLabel(day.date)}
-                  <span className="font-normal text-slate-400"> · {day.city}</span>
-                  {day.date === today ? (
-                    <span className="text-brand-600 dark:text-brand-400 ml-2 text-xs font-bold">
-                      TODAY
-                    </span>
-                  ) : null}
-                </>
-              }
-              meta={meta || undefined}
-              trailing={
-                <>
-                  <span className="flex items-center gap-1 text-xs text-slate-400 tabular-nums">
-                    <CalendarDays size={13} aria-hidden />
-                    {items.length}
-                  </span>
-                  {problems.length > 0 ? <SeverityChip severity={worst} compact /> : null}
-                </>
-              }
-            />
+            <div key={`${group.key}-${group.days[0]?.id}`}>
+              {group.stop ? (
+                <StayBlockHeading stop={group.stop} />
+              ) : (
+                <TravelBlockHeading count={group.days.length} />
+              )}
+              <div className="space-y-1.5">
+                {group.days.map((day) => (
+                  <DayRow
+                    key={day.id}
+                    tripId={bundle.trip.id}
+                    day={day}
+                    index={dayIndex.get(day.id) ?? 0}
+                    today={today}
+                    dayTripCity={stopCity && day.city !== stopCity ? day.city : null}
+                    hasError={errorDayIds.has(day.id)}
+                  />
+                ))}
+              </div>
+            </div>
           );
         })}
       </div>
