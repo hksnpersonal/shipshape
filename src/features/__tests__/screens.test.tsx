@@ -94,6 +94,17 @@ describe('the day timeline', () => {
 });
 
 describe('the conflict inbox', () => {
+  it('leads with every place the notes and the tickets disagree, unfolded', async () => {
+    renderAt(`/t/${TRIP}/conflicts`);
+    const heading = await screen.findByText(/^To review \(\d+\)$/);
+    const section = heading.closest('section') as HTMLElement;
+    const flags = europe2026.bundle.conflicts.filter((c) => c.id.startsWith('mc-review-'));
+    expect(flags.length).toBeGreaterThan(0);
+    for (const flag of flags) {
+      expect(within(section).getByText(flag.title)).toBeInTheDocument();
+    }
+  }, 15000);
+
   it('renames itself Plan check and groups findings by day, minor notes hidden', async () => {
     renderAt(`/t/${TRIP}/conflicts`);
     expect(await screen.findByRole('heading', { name: 'Plan check' })).toBeInTheDocument();

@@ -370,12 +370,18 @@ function DaySummaryCard({
   const tonight = accommodationForDate(bundle, day.date);
   const checkingOut = bundle.accommodations.find((a) => a.checkOut === day.date);
   const leaving = prevDay && prevDay.city !== day.city;
-  const moveItem = leaving
-    ? itemsForDay(bundle, day.id).find((i) => i.travel && i.time)
-    : undefined;
-  const tickets = bundle.bookings.filter(
-    (b) => b.date === day.date && (b.status === 'booked' || b.status === 'confirmed'),
-  );
+  // The journey that moves you, not the walk to the station: prefer a booked long-distance
+  // leg, then any long-distance leg, and never a walk or a metro hop.
+  const LOCAL_MODES = new Set(['walk', 'metro', 'tram', 'bus', 'taxi', 'shuttle']);
+  const longLegs = leaving
+    ? itemsForDay(bundle, day.id).filter(
+        (i) => i.travel && i.time && !LOCAL_MODES.has(i.travel.mode),
+      )
+    : [];
+  const moveItem = longLegs.find((i) => i.bookingId) ?? longLegs[0];
+  const tickets = bundle.bookings
+    .filter((b) => b.date === day.date && (b.status === 'booked' || b.status === 'confirmed'))
+    .sort((a, b) => (a.depart ?? '99:99').localeCompare(b.depart ?? '99:99'));
 
   if (!tonight && !checkingOut && !moveItem && tickets.length === 0) return null;
 
@@ -531,7 +537,7 @@ export function DayTimelinePage() {
           className="mb-4 flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-medium dark:border-amber-700 dark:bg-amber-900/30"
         >
           <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" aria-hidden />
-          {problems.length} to resolve
+          {problems.length} {problems.length === 1 ? 'thing' : 'things'} to look at
           <ChevronRight
             size={16}
             className="ml-auto text-amber-600 dark:text-amber-400"

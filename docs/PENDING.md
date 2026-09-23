@@ -9,6 +9,11 @@ Item 1 below is Phase 0 there.
 
 ## Blocked on the user
 
+- **Decide the eight "To review" cards** at the top of Plan check (ids `mc-review-*` in
+  `src/seed/europe-2026/bookings.ts`). They record where the traveller's notes, the
+  1 August itinerary and the tickets disagree. The traveller asked for them to be flagged,
+  not fixed. Day plans show ticket times. Delete a card once it is decided.
+
 - **Put it on both phones (before 25 September).** Build with a root base path from
   PowerShell, not Git Bash, which rewrites `/` into `C:/Program Files/Git/`:
   `$env:VITE_BASE='/'; npm run build`. Drag `dist` onto app.netlify.com/drop and claim the

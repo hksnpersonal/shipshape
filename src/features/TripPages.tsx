@@ -135,11 +135,25 @@ function WelcomeCard() {
 }
 
 /** Words for the countdown a first-time traveller actually reads, not a signed integer. */
-function tripTimingWords(daysAway: number, dayNumber: number, totalDays: number): string {
+/**
+ * Day numbers match the Days list and the traveller's notes: the departure day is day 0,
+ * so the first day on the ground is Day 1. After the last day there is still the flight
+ * home, then the trip is over - never "Day 0".
+ */
+function tripTimingWords(
+  today: string,
+  trip: { startDate: string; endDate: string },
+  todayIndex: number,
+  lastIndex: number,
+  lastDate: string | undefined,
+): string {
+  const daysAway = daysBetween(today, trip.startDate);
   if (daysAway > 1) return `Starts in ${daysAway} days`;
   if (daysAway === 1) return 'Tomorrow';
   if (daysAway === 0) return 'You leave today';
-  return `Day ${dayNumber} of ${totalDays}`;
+  if (todayIndex >= 0) return `Day ${todayIndex} of ${lastIndex}`;
+  if (lastDate && today > lastDate && today <= trip.endDate) return 'On the way home';
+  return 'Trip finished';
 }
 
 /** `Sat 26 Sep` -> `26 Sep`: the weekday earns its place on a day row, not a route summary. */
@@ -417,7 +431,6 @@ export function TripHomePage() {
   if (!bundle) return <EmptyState title="That trip is not on this device." />;
 
   const { trip } = bundle;
-  const daysAway = daysBetween(today, trip.startDate);
   const days = orderedDays(bundle);
   const todayIndex = days.findIndex((d) => d.date === today);
   const currentDay = todayIndex >= 0 ? days[todayIndex] : undefined;
@@ -430,7 +443,7 @@ export function TripHomePage() {
 
       <PageHeader
         title={trip.name}
-        subtitle={tripTimingWords(daysAway, todayIndex + 1, days.length)}
+        subtitle={tripTimingWords(today, trip, todayIndex, days.length - 1, days.at(-1)?.date)}
       />
 
       {trip.travellerNames?.length ? (
@@ -654,7 +667,9 @@ export function TodayRedirectPage() {
   const navigate = useNavigate();
 
   const days = bundle ? orderedDays(bundle) : [];
-  const target = days.find((d) => d.date === today) ?? days.find((d) => d.date > today) ?? days[0];
+  // After the last day, the last day is the useful one to land on, not the first.
+  const target =
+    days.find((d) => d.date === today) ?? days.find((d) => d.date > today) ?? days.at(-1);
   const targetPath = target ? `/t/${tripId}/days/${target.id}` : undefined;
 
   useEffect(() => {

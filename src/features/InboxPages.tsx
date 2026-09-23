@@ -99,7 +99,11 @@ export function ConflictInboxPage() {
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
 
-  const base = showResolved ? audit.findings.filter((f) => f.status !== 'open') : audit.open;
+  const shown = showResolved ? audit.findings.filter((f) => f.status !== 'open') : audit.open;
+  // Places where the notes and the tickets disagree, flagged for the traveller to decide.
+  // They lead the page in full, whatever their severity, instead of hiding in a folded day.
+  const toReview = shown.filter((f) => f.key.includes('mc-review-'));
+  const base = shown.filter((f) => !f.key.includes('mc-review-'));
   const infoCount = base.filter((f) => f.severity === 'info').length;
   const visible = showMinorNotes ? base : base.filter((f) => f.severity !== 'info');
 
@@ -157,7 +161,26 @@ export function ConflictInboxPage() {
         </button>
       ) : null}
 
-      {visible.length === 0 ? (
+      {toReview.length > 0 ? (
+        <Section title={`To review (${toReview.length})`}>
+          <p className="-mt-1 mb-3 text-sm text-slate-500 dark:text-slate-400">
+            Where your notes and your tickets disagree. The day plans show the ticket times.
+          </p>
+          <div className="space-y-3">
+            {toReview.map((finding) => (
+              <FindingRow
+                key={finding.key}
+                finding={finding}
+                tripId={bundle.trip.id}
+                onResolve={resolve}
+                onReopen={reopen}
+              />
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {visible.length === 0 && toReview.length === 0 ? (
         <EmptyState title={showResolved ? 'Nothing cleared yet.' : 'Nothing outstanding.'}>
           {showResolved ? undefined : 'The plan checks out as it stands.'}
         </EmptyState>
