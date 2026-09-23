@@ -1,4 +1,4 @@
-# Session handoff - Shipshape - 2026-09-06
+# Session handoff - Shipshape - 2026-09-24
 
 ## Where things stand
 
@@ -13,13 +13,13 @@ what is blocked by other people's terms rather than effort. Read it before plann
 
 ## Verified state
 
-Run on 2026-09-06, not quoted from memory.
+Run on 2026-09-24, not quoted from memory.
 
 | Check                                     | Result                                     |
 | ----------------------------------------- | ------------------------------------------ |
-| `npm run verify`                          | 158 tests pass, 10 files                   |
-| `npm run build`                           | clean, 15 precached entries, 764 KiB       |
-| `git status`                              | clean, 24 commits on `main`, no remote     |
+| `npm run verify`                          | 169 tests pass, 11 files                   |
+| `npm run build`                           | clean, 15 precached entries, 784 KiB       |
+| `git status`                              | clean, 25 commits on `main`, no remote     |
 | Audit of the sample trip (today = 04 Sep) | 111 findings: 5 error, 49 warning, 57 info |
 
 The seed was not touched, so the five errors are unchanged and still genuine.
@@ -33,6 +33,12 @@ The second prints the audit, and is how rule noise gets diagnosed.
 `checkpoint-2026-09-06-01` tags this state.
 
 ## What landed
+
+- **A tightening pass over every screen** (`f59320d`). Shared `Row`, `Disclosure`,
+  `FactStrip`, `FilterChips`, `SearchInput` and `StatTile` live in `components/ui.tsx`.
+  The playbook moved to `features/PlaybookPages.tsx`, with search, category tiles and a
+  booking timeline. "Watch for" says **Non-refundable** only when the rules say so, and
+  otherwise "Check refund rules". Never infer a refund from free text.
 
 - **Documents vault** at `t/:tripId/documents`, plus an attach control on the booking
   screen, which is where you are when you want to file a ticket.
@@ -73,13 +79,14 @@ correct what is wrong now that it can be.
 
 ## Open questions
 
-- **Time-sensitive, not a code task.** Galleria Borghese's book-by date was **2026-09-06**,
-  which is today. It is the only thing in the "book now" band. The trip departs **9
-  October**.
+- **Time-sensitive, not a code task.** Galleria Borghese's book-by date was **2026-09-06**
+  and has passed. Unknown whether it was booked. The trip departs **9 October**.
 - **Publishing.** No `gh` and no git remote. Name the repository `shipshape`: `deploy.yml`
   reads the base path from it and `vite.config.ts` defaults to `/shipshape/`. Then Settings,
   Pages, Source set to "GitHub Actions" once. Git identity is set repo-locally to
   `Claude <noreply@anthropic.com>`, matching history; change it before publishing.
+  **The seed trip is bundled into the build**, so a public Pages site publishes the
+  itinerary. Decide whether that is acceptable before pushing.
 
 ## Deliberately not done
 
