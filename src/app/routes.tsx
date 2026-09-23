@@ -5,6 +5,7 @@ import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
 import { DocumentsVaultPage } from '@/features/DocumentPages';
 import { ConflictInboxPage, RemindersPage, SettingsPage } from '@/features/InboxPages';
 import { PlaybookDetailPage, PlaybookIndexPage } from '@/features/PlaybookPages';
+import { PrimerPage } from '@/features/PrimerPage';
 import {
   DaysIndexPage,
   TodayRedirectPage,
@@ -33,6 +34,7 @@ export const router = createBrowserRouter(
         { path: 't/:tripId/conflicts', element: <ConflictInboxPage /> },
         { path: 't/:tripId/reminders', element: <RemindersPage /> },
         { path: 't/:tripId/documents', element: <DocumentsVaultPage /> },
+        { path: 't/:tripId/guide', element: <PrimerPage /> },
         { path: 'playbook', element: <PlaybookIndexPage /> },
         { path: 'playbook/:guideId', element: <PlaybookDetailPage /> },
         { path: 'settings', element: <SettingsPage /> },

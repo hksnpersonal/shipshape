@@ -454,6 +454,13 @@ export function TripHomePage() {
 
       <QuickTiles tripId={trip.id} />
 
+      <Link
+        to={`/t/${trip.id}/guide`}
+        className="hover:border-brand-400 mb-4 block rounded-xl border border-slate-200 bg-white p-3 text-sm font-medium shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800"
+      >
+        New to Europe? Read this first →
+      </Link>
+
       {trip.essentials?.length ? (
         <div id="essentials">
           <EssentialsCard essentials={trip.essentials} />

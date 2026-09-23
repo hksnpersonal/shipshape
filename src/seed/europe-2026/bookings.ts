@@ -932,4 +932,100 @@ export const conflicts: ManualConflict[] = [
     itemIds: [itemId('d22', 4)],
     source: 'notes',
   },
+  // --- To review: where the notes, the 1 August itinerary and the tickets disagree. ---
+  // Flagged rather than fixed, at the traveller's request. The day screens show the
+  // ticket times; these cards say what the notes said instead, so nothing is lost.
+  {
+    id: 'mc-review-rom-flr',
+    tripId: TRIP_ID,
+    title: 'To review: Rome to Florence arrives 10:11, not 10:00',
+    detail:
+      'The notes give 08:35 to 10:00. The ticket says 08:35 to 10:11. The day plan uses the ticket time.',
+    severity: 'warning',
+    dayId: dayId('d04'),
+    itemIds: [],
+    bookingIds: [BK.frecciarossaRomFlr],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-flr-vce',
+    tripId: TRIP_ID,
+    title: 'To review: Florence to Venice is 08:39 to 10:55, not 08:30 to 11:00',
+    detail:
+      'The notes give 08:30 to 11:00. The Italo ticket says 08:39 to 10:55. The day plan uses the ticket time.',
+    severity: 'warning',
+    dayId: dayId('d06'),
+    itemIds: [],
+    bookingIds: [BK.italoFlrVce],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-paris-arrival',
+    tripId: TRIP_ID,
+    title: 'To review: Paris afternoon on 11 Oct is planned for an earlier train',
+    detail:
+      'The notes have the TGV at 12:37 arriving 13:40, check-in at 14:30 and Notre-Dame at 16:30. The ticket is the 12:34 arriving Gare de Lyon at 15:40, so check-in is realistically about 16:15. The 1 August itinerary already plans for this: check-in 16:30, Notre-Dame about 17:30, then Les Deux Magots for hot chocolate at 18:00.',
+    severity: 'warning',
+    dayId: dayId('d16'),
+    itemIds: [],
+    bookingIds: [BK.tgvBslPar],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-brussels-return',
+    tripId: TRIP_ID,
+    title: 'To review: the Brussels return is booked for 13:13, not 17:15',
+    detail:
+      'The notes plan a 17:15 train back arriving about 19:00, with the Grand Place route in the afternoon. The Eurostar ticket is the 13:13 arriving Paris 14:35. Either do the route in the morning (the 1 August itinerary explores 09:00 to 12:30, and the stops are all within about ten minutes of each other) or change the ticket with Eurostar and pay any fare difference.',
+    severity: 'warning',
+    dayId: dayId('d19'),
+    itemIds: [],
+    bookingIds: [BK.eurostarBruPar],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-par-ams',
+    tripId: TRIP_ID,
+    title: 'To review: the Amsterdam Eurostar now leaves at 09:20',
+    detail:
+      'The notes say 09:24 arriving 12:45. Eurostar reissued the tickets on 9 September for 09:20, arriving 12:50. Plan to be at Gare du Nord by 09:00.',
+    severity: 'warning',
+    dayId: dayId('d20'),
+    itemIds: [],
+    bookingIds: [BK.eurostarParAms],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-kandersteg-change',
+    tripId: TRIP_ID,
+    title: 'To review: no time to change trains at Spiez on 9 Oct',
+    detail:
+      'The notes have the train to Spiez arriving 08:55 and the Kandersteg train leaving 08:50. The 1 August itinerary says 09:00 from Spiez. Check the real connection in the SBB app the evening before.',
+    severity: 'warning',
+    dayId: dayId('d14'),
+    itemIds: [],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-seine-cruise',
+    tripId: TRIP_ID,
+    title: 'To review: is the 19:00 Seine river cruise on 13 Oct booked?',
+    detail:
+      "The 1 August itinerary has a Bateaux Parisiens Seine cruise at 19:00 from Port de la Bourdonnais (arrive 30 minutes early), and L'Auberge Aveyronnaise at 20:30 marked 'reservation needed'. Neither is in these notes and there is no ticket for the cruise in your documents. It also adds Montmartre and Place du Tertre that morning.",
+    severity: 'warning',
+    dayId: dayId('d18'),
+    itemIds: [],
+    source: 'notes',
+  },
+  {
+    id: 'mc-review-amsterdam-food',
+    tripId: TRIP_ID,
+    title: 'To review: two versions of the first Amsterdam afternoon',
+    detail:
+      'These notes go to Van Stapele at 15:30 and Cafe Papeneiland for apple pie at 16:15. The 1 August itinerary goes to Van Stapele first at 13:20 (it often sells out in the afternoon) and Cafe Winkel 43 for apple pie at 17:30.',
+    severity: 'info',
+    dayId: dayId('d20'),
+    itemIds: [],
+    source: 'notes',
+  },
 ];
