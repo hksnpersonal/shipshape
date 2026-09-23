@@ -10,6 +10,7 @@ import { Link } from 'react-router';
 import { AlertTriangle, ChevronDown, ChevronRight, Info, Search, X, XOctagon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import type { Severity, Tag } from '@/domain/types';
+import { CATEGORY_META, type Category } from '@/domain/categories';
 
 export function Card({
   children,
@@ -513,5 +514,30 @@ export function StatTile({
     <Link to={to} className={cn(base, 'hover:border-brand-400 block transition hover:shadow')}>
       {body}
     </Link>
+  );
+}
+
+/** The coloured icon badge that says "hotel" or "train" before any text is read. */
+export function CategoryIcon({
+  category,
+  size = 'md',
+}: {
+  category: Category;
+  size?: 'sm' | 'md';
+}) {
+  const meta = CATEGORY_META[category];
+  const Icon = meta.icon;
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center rounded-lg',
+        size === 'sm' ? 'h-7 w-7' : 'h-9 w-9',
+        meta.tone,
+      )}
+      title={meta.label}
+    >
+      <Icon size={size === 'sm' ? 15 : 18} aria-hidden />
+      <span className="sr-only">{meta.label}</span>
+    </span>
   );
 }
