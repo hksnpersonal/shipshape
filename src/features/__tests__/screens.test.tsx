@@ -219,13 +219,18 @@ describe('the documents vault', () => {
     });
     const blobSpy = vi.spyOn(documentsRepo, 'blob');
     const scheduled = vi.spyOn(window, 'setTimeout');
+    const tab = { location: { href: '' }, close: vi.fn() };
+    vi.mocked(window.open).mockReturnValue(tab as unknown as Window);
 
     renderAt(`/t/${TRIP}/documents`);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /Open/ }));
 
+    // The tab opens inside the tap itself - iPhone Safari blocks one opened after an
+    // await - and receives the file once it has been read.
+    expect(window.open).toHaveBeenCalledWith('', '_blank');
     await waitFor(() => expect(blobSpy).toHaveBeenCalledWith(docId));
-    expect(window.open).toHaveBeenCalledWith('blob:mock', '_blank', 'noopener');
+    await waitFor(() => expect(tab.location.href).toBe('blob:mock'));
 
     // The new tab is still fetching the URL. Revoking synchronously blanks it - reliably so
     // on iOS Safari - so nothing may be freed until the tab has had time to load.

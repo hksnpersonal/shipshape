@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { europe2026 } from '@/seed/europe-2026';
 import { db } from '../db';
 import { documentsRepo, settingsRepo } from '../repo';
-import { ensureSeed } from '../seedLoader';
+import { ensureSeed, fetchMissingDocuments } from '../seedLoader';
 import { exportTrip, importTrip } from '../transfer';
 
 const TRIP = europe2026.bundle.trip.id;
@@ -84,5 +84,50 @@ describe('ensureSeed', () => {
     await ensureSeed({ privateTripUrl: URL, fetchImpl: serving(file) });
     expect(await db.trips.count()).toBe(1);
     expect(await db.documents.count()).toBe(1);
+  });
+});
+
+describe('fetchMissingDocuments', () => {
+  it('downloads each document that arrived without its file, and skips the rest', async () => {
+    const file = await privateFile();
+    const withoutData = {
+      ...file,
+      documents: file.documents.map((d) => ({ ...d, data: undefined })),
+    };
+    await ensureSeed({ privateTripUrl: URL, fetchImpl: serving(withoutData) });
+    const [doc] = await db.documents.toArray();
+    expect(await db.documentBytes.get(doc!.id)).toBeUndefined();
+
+    const fetchImpl = vi.fn(
+      async () => new Response(new Uint8Array([1, 2, 3])),
+    ) as unknown as typeof fetch;
+    expect(await fetchMissingDocuments('/', fetchImpl)).toBe(1);
+    expect(fetchImpl).toHaveBeenCalledWith(`/docs/${doc!.id}`);
+    expect(new Uint8Array((await db.documentBytes.get(doc!.id))!.bytes)).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+
+    // Second launch: nothing left to fetch.
+    expect(await fetchMissingDocuments('/', fetchImpl)).toBe(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a failed download for next time', async () => {
+    const file = await privateFile();
+    const withoutData = {
+      ...file,
+      documents: file.documents.map((d) => ({ ...d, data: undefined })),
+    };
+    await ensureSeed({ privateTripUrl: URL, fetchImpl: serving(withoutData) });
+
+    const offline = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }) as unknown as typeof fetch;
+    expect(await fetchMissingDocuments('/', offline)).toBe(0);
+    expect(await db.documentBytes.count()).toBe(0);
+  });
+
+  it('does nothing in the public build', async () => {
+    expect(await fetchMissingDocuments(null)).toBe(0);
   });
 });

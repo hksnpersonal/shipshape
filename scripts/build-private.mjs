@@ -9,7 +9,7 @@
  * never be committed), asks search engines not to index it, and is meant for an unlisted
  * address shared only between the travellers.
  */
-import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
@@ -37,7 +37,20 @@ process.env.VITE_PRIVATE_TRIP = '1';
 process.env.VITE_BASE = '/';
 await build({ root: repo, logLevel: 'warn', build: { outDir, emptyOutDir: true } });
 
-copyFileSync(tripPath, path.join(outDir, 'trip.shipshape.json'));
+// The trip goes out without its documents, so it is small enough to load before the app
+// opens. Each document becomes its own file, fetched in the background afterwards.
+const docsDir = path.join(outDir, 'docs');
+mkdirSync(docsDir, { recursive: true });
+let docCount = 0;
+const documents = trip.documents.map(({ data, ...meta }) => {
+  if (data) {
+    writeFileSync(path.join(docsDir, meta.id), Buffer.from(data, 'base64'));
+    docCount += 1;
+  }
+  return meta;
+});
+const slim = JSON.stringify({ ...trip, documents });
+writeFileSync(path.join(outDir, 'trip.shipshape.json'), slim);
 writeFileSync(path.join(outDir, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
 writeFileSync(
   path.join(outDir, '_headers'),
@@ -47,11 +60,13 @@ writeFileSync(
     '  Referrer-Policy: no-referrer',
     '/trip.shipshape.json',
     '  Cache-Control: no-store',
+    '/docs/*',
+    '  Content-Type: application/octet-stream',
     '',
   ].join('\n'),
 );
 
-const docs = trip.documents.filter((d) => d.data).length;
+const kb = Math.round(Buffer.byteLength(slim) / 1024);
 console.log(
-  `Private site written to ${outDir}: ${trip.bundle.bookings.length} bookings, ${docs} documents.`,
+  `Private site written to ${outDir}: ${trip.bundle.bookings.length} bookings (${kb} KB), ${docCount} documents in docs/.`,
 );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
-import { ensureSeed } from '@/db/seedLoader';
+import { ensureSeed, fetchMissingDocuments } from '@/db/seedLoader';
 import { UpdatePrompt } from '@/pwa/UpdatePrompt';
 import { requestPersistentStorage } from '@/pwa/storage';
 import { router } from './routes';
@@ -12,7 +12,11 @@ export default function App() {
   useEffect(() => {
     void requestPersistentStorage();
     ensureSeed()
-      .then(() => setReady(true))
+      .then(() => {
+        setReady(true);
+        // Tickets arrive after the app is usable, never before it.
+        void fetchMissingDocuments();
+      })
       .catch((error: unknown) => {
         setFailed(error instanceof Error ? error.message : 'Storage is not available.');
         setReady(true);
@@ -22,7 +26,10 @@ export default function App() {
   if (!ready) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <h1 className="text-lg font-semibold text-slate-500">Shipshape</h1>
+        <div className="text-center">
+          <h1 className="text-lg font-semibold text-slate-500">Shipshape</h1>
+          <p className="mt-1 text-sm text-slate-400">Getting your trip ready…</p>
+        </div>
       </main>
     );
   }

@@ -14,11 +14,15 @@ import { db } from './db';
 import { settingsRepo } from './repo';
 import { importTrip } from './transfer';
 
-/** Where a private build serves the bundled trip file; absent in the public build. */
-export const PRIVATE_TRIP_URL =
-  import.meta.env.VITE_PRIVATE_TRIP === '1'
-    ? `${import.meta.env.BASE_URL}trip.shipshape.json`
-    : null;
+/**
+ * Where a private build serves its files; absent in the public build. The trip itself is
+ * small and loads before the app opens. Each document is a separate file fetched in the
+ * background afterwards, because one 13 MB download that has to finish before anything
+ * shows is a phone stuck on a loading screen.
+ */
+export const PRIVATE_BASE =
+  import.meta.env.VITE_PRIVATE_TRIP === '1' ? import.meta.env.BASE_URL : null;
+export const PRIVATE_TRIP_URL = PRIVATE_BASE ? `${PRIVATE_BASE}trip.shipshape.json` : null;
 
 export interface SeedOptions {
   privateTripUrl?: string | null;
@@ -59,4 +63,35 @@ async function loadPrivateTrip(url: string, fetchImpl: typeof fetch): Promise<bo
   await importTrip(file, { mode: 'replace' });
   await settingsRepo.patch({ preloadedTripAt: new Date().toISOString() });
   return true;
+}
+
+/**
+ * Downloads the file behind every document that arrived without one, one at a time.
+ * Safe to run on every launch: a document that already has its bytes is skipped, and one
+ * that fails (no signal on a train) is simply tried again next time. Returns how many
+ * files arrived.
+ */
+export async function fetchMissingDocuments(
+  baseUrl: string | null = PRIVATE_BASE,
+  fetchImpl: typeof fetch = fetch,
+): Promise<number> {
+  if (!baseUrl) return 0;
+  const metas = await db.documents.toArray();
+  let arrived = 0;
+  for (const meta of metas) {
+    if (await db.documentBytes.get(meta.id)) continue;
+    try {
+      const response = await fetchImpl(`${baseUrl}docs/${encodeURIComponent(meta.id)}`);
+      if (!response.ok) continue;
+      const bytes = await response.arrayBuffer();
+      // The document may have been removed while it downloaded.
+      if (await db.documents.get(meta.id)) {
+        await db.documentBytes.put({ id: meta.id, bytes });
+        arrived += 1;
+      }
+    } catch {
+      // Offline or interrupted: leave it for the next launch.
+    }
+  }
+  return arrived;
 }

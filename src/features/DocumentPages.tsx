@@ -51,10 +51,18 @@ export const OBJECT_URL_TTL_MS = 60_000;
 
 /** Rebuilds the file from stored bytes, opens it in a new tab, and cleans up after. */
 async function openDocument(id: ID): Promise<void> {
+  // Open the tab now, while the tap still counts as the user's: iPhone Safari blocks a
+  // window opened after an await. The file is loaded into it once it has been read.
+  const tab = window.open('', '_blank');
   const blob = await documentsRepo.blob(id);
-  if (!blob) return;
+  if (!blob) {
+    tab?.close();
+    window.alert('This file is still downloading. Try again in a moment.');
+    return;
+  }
   const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener');
+  if (tab) tab.location.href = url;
+  else window.location.href = url;
   window.setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_TTL_MS);
 }
 
