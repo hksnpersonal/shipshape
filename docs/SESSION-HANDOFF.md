@@ -1,5 +1,12 @@
 # Session handoff - Shipshape - 2026-09-24
 
+> **Redesign, 2026-09-24.** The traveller chose "Direction A" (design canvas:
+> claude.ai/artifact/CURzEuVx4dM1fmkmtaRu99) over a city-binder alternative. Four tabs:
+> Today, Trip, Wallet, More. The palette lives in `src/index.css` by redefining Tailwind's
+> `slate` (paper to ink) and `brand` (terracotta) scales, so screens keep using those
+> names; fonts are bundled via `@fontsource-variable`. Restore point before it:
+> `checkpoint-2026-09-24-02`.
+
 > **Correction, 2026-09-24 (later session).** The trip departs **25 September 2026**
 > (Sydney 21:05, TK175), not 9 October. The end date of 18 October is correct: the flight
 > home lands in Sydney on the 18th, so `trip-range` no longer fires. The seed was
