@@ -14,11 +14,14 @@ Item 1 below is Phase 0 there.
   1 August itinerary and the tickets disagree. The traveller asked for them to be flagged,
   not fixed. Day plans show ticket times. Delete a card once it is decided.
 
-- **Put it on both phones (before 25 September).** Build with a root base path from
-  PowerShell, not Git Bash, which rewrites `/` into `C:/Program Files/Git/`:
-  `$env:VITE_BASE='/'; npm run build`. Drag `dist` onto app.netlify.com/drop and claim the
-  site. `public/_redirects` handles deep links. Then on each phone open the URL, add it to
-  the home screen, and import `Europe 2026.shipshape.json` from Settings.
+- **Put it on both phones (before 25 September).** `npm run build:private` writes the
+  private site to `Europe Trips\Shipshape private site` (outside the repo, by design:
+  it carries the trip file with every reference and document). Drag that folder onto
+  app.netlify.com/drop and claim it. Each phone opens the link once and has everything;
+  the file loads once per device (`settings.preloadedTripAt`) so later launches never
+  overwrite changes made on the phone. Anyone with the URL can read it: share it only
+  between the two travellers. The public `dist` (`$env:VITE_BASE='/'; npm run build`,
+  from PowerShell, not Git Bash) has no private data.
 - **Regenerating the private file** after changing the seed or the overlay:
   `node scripts/make-private-trip.mjs "<Europe Trips>\shipshape-private.json" "<Europe Trips>\Europe 2026.shipshape.json"`.
   Importing it again replaces the trip on the phone, including any edits made there.

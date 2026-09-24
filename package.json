@@ -13,7 +13,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test"
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "trip:private": "node scripts/make-private-trip.mjs \"../../Europe Trips/shipshape-private.json\" \"../../Europe Trips/Europe 2026.shipshape.json\"",
+    "build:private": "npm run trip:private && node scripts/build-private.mjs \"../../Europe Trips/Europe 2026.shipshape.json\" \"../../Europe Trips/Shipshape private site\""
   },
   "dependencies": {
     "react": "19.2.8",

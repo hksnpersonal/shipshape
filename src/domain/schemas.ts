@@ -366,6 +366,7 @@ export const ProviderSettingsSchema = z.object({
   simulatedToday: ISODateSchema.nullable().optional(),
   showHomeTime: z.boolean().optional(),
   lastExportAt: z.string().nullable().optional(),
+  preloadedTripAt: z.string().nullable().optional(),
 });
 
 export const TripBundleSchema = z.object({

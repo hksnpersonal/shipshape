@@ -411,6 +411,11 @@ export interface ProviderSettings {
   showHomeTime?: boolean;
   /** Last successful export, for the backup nudge. */
   lastExportAt?: Timestamp | null;
+  /**
+   * When a private build's bundled trip file was loaded on this device. Set once, so a
+   * later launch never replaces the trip and throws away changes made on the phone.
+   */
+  preloadedTripAt?: Timestamp | null;
 }
 
 export const DEFAULT_SETTINGS: ProviderSettings = {
