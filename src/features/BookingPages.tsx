@@ -1,14 +1,31 @@
 /**
- * The bookings board, the book-by queue, and one booking in detail.
+ * The Wallet: every ticket, pass and booking in one board, and one booking in detail.
  *
- * This is the screen that replaces the pile of confirmation emails, and the guide card is
- * what replaces searching for "is X worth booking in advance". The board groups by date,
- * not status - a traveller thinks "what's happening Tuesday", not "what's still on_site" -
- * with anything still to book pulled into one callout up top instead of its own section.
+ * The board leads with what is actually coming up - a handful of pass-styled cards for
+ * the next few days, plain rows for the rest - with everything still to book folded into
+ * one line instead of its own section, and everything already past tucked out of the way.
+ * The detail screen is shaped by what the booking actually is: a ticket wants a departure
+ * and arrival, a hotel wants a check-in and an address, and everything else gets the same
+ * plain facts. The guide card is what replaces searching for "is X worth booking in
+ * advance".
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { AlertTriangle, Check, Copy, ExternalLink, Paperclip, Plus, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  MapPin,
+  Paperclip,
+  Plus,
+  X,
+} from 'lucide-react';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -18,7 +35,6 @@ import {
   Disclosure,
   EmptyState,
   Fact,
-  FilterChips,
   LinkCard,
   OutLink,
   PageHeader,
@@ -27,14 +43,14 @@ import {
 import { cn } from '@/lib/cn';
 import { bookingsRepo } from '@/db/repo';
 import { itemsOfBooking } from '@/domain/bundle';
-import { bookingCategory, type Category } from '@/domain/categories';
-import { daysBetween, formatDayLabel } from '@/domain/time';
+import { bookingCategory, CATEGORY_META, type Category } from '@/domain/categories';
+import { daysBetween, formatDayLabel, toMinutes } from '@/domain/time';
 import { AttachDocumentButton, DocumentRow } from '@/features/DocumentPages';
 import { GuideCard } from '@/features/PlaybookPages';
 import { bookingLinks, placeUrl } from '@/playbook/deepLinks';
 import { matchGuides } from '@/playbook/match';
 import { bookBy } from '@/playbook/bookBy';
-import { useBookBy, useDocumentsFor, useToday, useTripBundle } from '@/hooks/useTrip';
+import { useAudit, useBookBy, useDocumentsFor, useToday, useTripBundle } from '@/hooks/useTrip';
 import type {
   Accommodation,
   Booking,
@@ -54,8 +70,9 @@ const STATUS_WORDS: Record<BookingStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-/** The board row's status chip uses shorter, plainer words than the full status list -
- * there is no room on a 56px row for "Confirmed" and "Nothing to book" both to fit. */
+/** The board's status chip uses shorter, plainer words than the full status list -
+ * there is no room on a compact row or a pass card for "Confirmed" and "Nothing to book"
+ * both to fit. */
 const ROW_STATUS_WORDS: Record<BookingStatus, string> = {
   to_book: 'Still to book',
   booked: 'Booked',
@@ -65,12 +82,32 @@ const ROW_STATUS_WORDS: Record<BookingStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-/** The categories a booking can actually be filtered by on the board - "note" (kind
- * `other`) has no chip of its own and just shows up under every filter that isn't active. */
-const CATEGORY_FILTERS: Array<{ value: Category; label: string }> = [
+/** The plain word for what a booking actually is, used on the pass card's tinted header -
+ * coarser than the full kind list, which is too precise to read at a glance. */
+const KIND_WORDS: Record<BookingKind, string> = {
+  flight: 'Flight',
+  train: 'Train',
+  'regional-train': 'Train',
+  'international-train': 'Train',
+  ferry: 'Ferry',
+  'mountain-railway': 'Mountain railway',
+  gondola: 'Gondola',
+  bus: 'Bus',
+  hotel: 'Hotel',
+  restaurant: 'Restaurant',
+  attraction: 'Ticket',
+  pass: 'Pass',
+  'city-card': 'City card',
+  other: 'Booking',
+};
+
+/** The board's own category row: All plus one pill per bucket. "note" (kind `other`) has
+ * no chip of its own and just shows up under every filter that isn't active. */
+const CATEGORY_TABS: Array<{ value: Category | 'all'; label: string }> = [
+  { value: 'all', label: 'All' },
   { value: 'transport', label: 'Transport' },
   { value: 'stay', label: 'Hotels' },
-  { value: 'activity', label: 'Sightseeing' },
+  { value: 'activity', label: 'Sights' },
   { value: 'food', label: 'Food' },
   { value: 'pass', label: 'Passes' },
 ];
@@ -117,27 +154,6 @@ function statusTone(status: BookingStatus) {
   if (status === 'cancelled') return 'bad' as const;
   if (status === 'booked' || status === 'confirmed') return 'good' as const;
   return 'neutral' as const;
-}
-
-function urgencyLabel(entry: BookByEntry): {
-  text: string;
-  tone: 'bad' | 'warn' | 'neutral' | 'good';
-} {
-  const { urgency, daysLeft, date } = entry.result;
-  switch (urgency) {
-    case 'overdue':
-      return { text: `${Math.abs(daysLeft ?? 0)} days past the sensible date`, tone: 'bad' };
-    case 'now':
-      return { text: `Book within ${daysLeft} days`, tone: 'warn' };
-    case 'soon':
-      return { text: `Book by ${date}`, tone: 'neutral' };
-    case 'on-site':
-      return { text: 'Buy it on the day', tone: 'neutral' };
-    case 'done':
-      return { text: 'Sorted', tone: 'good' };
-    default:
-      return { text: date ? `Book by ${date}` : 'No deadline', tone: 'neutral' };
-  }
 }
 
 /**
@@ -280,116 +296,249 @@ function AddBookingForm({
   );
 }
 
-/** `26 Sep`, the weekday dropped - a board row already sits under a dated header that
- * carries it. */
+/** `26 Sep`, the weekday dropped - used where the date already sits beside a weekday
+ * elsewhere on the same line. */
 function shortDate(date: string): string {
   return formatDayLabel(date).split(' ').slice(1).join(' ');
 }
 
-/** The one line of "when" a board row has room for: a time pair for anything timed, a
- * check-in date and a night count for a hotel, nothing at all for a booking with neither. */
-function boardTimeLine(booking: Booking, accommodation?: Accommodation): string | null {
+/** "1 h 25" / "45 min" between a booking's depart and arrive, allowing for an overnight
+ * arrival date. Null when either time is missing, so nothing is guessed at. */
+function durationLabel(booking: Booking): string | null {
+  if (!booking.depart || !booking.arrive) return null;
+  const start = toMinutes(booking.depart);
+  const end = toMinutes(booking.arrive);
+  if (start == null || end == null) return null;
+  const overnightMins =
+    booking.arriveDate && booking.arriveDate !== booking.date
+      ? daysBetween(booking.date, booking.arriveDate) * 1440
+      : 0;
+  const total = end - start + overnightMins;
+  if (total <= 0) return null;
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} h`;
+  return `${hours} h ${minutes}`;
+}
+
+/** All but the last two characters replaced with a bullet, grouped in pairs for
+ * readability - "PNR-9490" becomes "•• •• •• 90". A short reference is left alone: there
+ * is nothing meaningful left to hide. */
+function maskReference(reference: string): string {
+  const visible = reference.slice(-2);
+  const hiddenLength = Math.max(reference.length - visible.length, 0);
+  const combined = '•'.repeat(hiddenLength) + visible;
+  return combined.match(/.{1,2}/g)?.join(' ') ?? combined;
+}
+
+/** A booking on the same date whose route runs the other way - the return half of a day
+ * trip, worth a link straight from the outbound leg rather than a search through Later. */
+function findSameDayReturn(bookings: Booking[], booking: Booking): Booking | undefined {
+  if (!booking.from || !booking.to) return undefined;
+  return bookings.find(
+    (b) =>
+      b.id !== booking.id &&
+      b.date === booking.date &&
+      b.from?.name === booking.to?.name &&
+      b.to?.name === booking.from?.name,
+  );
+}
+
+/** The pass card's big line: a time pair for anything timed, "Check in HH:mm" for a
+ * hotel, the date alone when neither is known - never a guess. */
+function passCardTimeLine(booking: Booking, accommodation?: Accommodation): string {
+  if (booking.kind === 'hotel') {
+    const time = accommodation?.checkInTime;
+    return time ? `Check in ${time}` : 'Check in';
+  }
+  if (booking.depart && booking.arrive) return `${booking.depart} → ${booking.arrive}`;
+  if (booking.depart) return booking.depart;
+  return formatDayLabel(booking.date);
+}
+
+/** The pass card's smaller line: nights for a hotel, a seat summary for anyone with one,
+ * a traveller count otherwise, or nothing when there is nothing to say. */
+function passCardSubLine(booking: Booking, accommodation?: Accommodation): string | null {
   if (booking.kind === 'hotel') {
     const checkIn = accommodation?.checkIn ?? booking.date;
     const checkOut = accommodation?.checkOut ?? booking.endDate;
-    const nights = checkOut ? daysBetween(checkIn, checkOut) : null;
-    return nights != null
-      ? `Check-in ${shortDate(checkIn)} · ${nights} night${nights === 1 ? '' : 's'}`
-      : `Check-in ${shortDate(checkIn)}`;
+    if (!checkOut) return null;
+    const nights = daysBetween(checkIn, checkOut);
+    return `${nights} night${nights === 1 ? '' : 's'}`;
   }
-  if (booking.depart && booking.arrive) return `${booking.depart} → ${booking.arrive}`;
-  return booking.depart ?? null;
-}
-
-interface DateGroup {
-  date: string;
-  entries: BookByEntry[];
-}
-
-/** Board rows read top to bottom by date, the order a traveller actually needs things in
- * - not by booking status, which was the old layout's whole problem. */
-function groupByDate(entries: BookByEntry[]): DateGroup[] {
-  const byDate = new Map<string, BookByEntry[]>();
-  for (const entry of entries) {
-    const list = byDate.get(entry.booking.date) ?? [];
-    list.push(entry);
-    byDate.set(entry.booking.date, list);
+  const passengers = booking.passengers ?? [];
+  if (passengers.length === 0) return null;
+  const coaches = new Set(passengers.map((p) => p.coach).filter(Boolean));
+  if (coaches.size === 1 && passengers.every((p) => p.seat)) {
+    const seats = passengers.map((p) => p.seat).join(', ');
+    return `Coach ${passengers[0]?.coach} · Seat${passengers.length > 1 ? 's' : ''} ${seats}`;
   }
-  return [...byDate.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, list]) => ({
-      date,
-      entries: [...list].sort((a, b) =>
-        (a.booking.depart ?? '').localeCompare(b.booking.depart ?? ''),
-      ),
-    }));
+  const lines = passengers.map(passengerSeatLine).filter((line): line is string => line !== null);
+  if (lines.length > 0) return lines.join(', ');
+  return `${passengers.length} traveller${passengers.length === 1 ? '' : 's'}`;
 }
 
-/** One line per booking: the category badge carries most of the meaning, the time or
- * check-in says whether it needs attention today, and the paperclip says whether the
- * ticket is already on the phone. Aims for well under 60px, not a card with big padding. */
-function BookingRow({
+/**
+ * "Next up": the next three bookings worth seeing at a glance, styled like the ticket
+ * itself rather than a plain list row - a tinted strip for what kind of thing it is, then
+ * the one line that actually answers "when".
+ */
+function PassCard({
   tripId,
-  entry,
+  booking,
   accommodation,
   documentCount,
 }: {
   tripId: ID;
-  entry: BookByEntry;
+  booking: Booking;
   accommodation?: Accommodation;
   documentCount: number;
 }) {
-  const { booking } = entry;
-  const timeLine = boardTimeLine(booking, accommodation);
+  const category = bookingCategory(booking.kind);
+  const meta = CATEGORY_META[category];
+  const Icon = meta.icon;
+  const subLine = passCardSubLine(booking, accommodation);
   return (
     <Link
       to={`/t/${tripId}/bookings/${booking.id}`}
-      className="hover:border-brand-400 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800"
+      className="mb-3 block overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
     >
-      <CategoryIcon category={bookingCategory(booking.kind)} size="sm" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{booking.title}</p>
-        {timeLine ? <p className="truncate text-xs text-slate-500">{timeLine}</p> : null}
+      <div
+        className={cn(
+          'flex items-center justify-between gap-2 px-3.5 py-2.5 text-xs font-bold tracking-wide uppercase',
+          meta.tone,
+        )}
+      >
+        <span className="flex items-center gap-1.5">
+          <Icon size={15} aria-hidden />
+          {KIND_WORDS[booking.kind]}
+        </span>
+        <span>{formatDayLabel(booking.date)}</span>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {documentCount > 0 ? (
-          <span className="inline-flex items-center gap-0.5 text-xs text-slate-400">
-            <Paperclip size={12} aria-hidden /> {documentCount}
+      <div className="px-3.5 pt-3 pb-3.5">
+        <p className="font-medium">{booking.title}</p>
+        <p className="font-display mt-1 text-2xl font-semibold tracking-tight">
+          {passCardTimeLine(booking, accommodation)}
+        </p>
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <span className="truncate text-sm text-slate-500">{subLine}</span>
+          <span className="flex shrink-0 items-center gap-2">
+            <Chip tone={statusTone(booking.status)}>{ROW_STATUS_WORDS[booking.status]}</Chip>
+            {documentCount > 0 ? (
+              <span className="inline-flex items-center gap-0.5 text-xs text-slate-400">
+                <Paperclip size={12} aria-hidden /> {documentCount}
+              </span>
+            ) : null}
           </span>
-        ) : null}
-        <Chip tone={statusTone(booking.status)}>{ROW_STATUS_WORDS[booking.status]}</Chip>
+        </div>
       </div>
     </Link>
   );
 }
 
-/** Everything still needing a booking, in one glance - not a full section of its own,
- * since a section per status is what made the old board four thousand pixels tall. */
-function StillToBookCallout({ tripId, entries }: { tripId: ID; entries: BookByEntry[] }) {
-  if (entries.length === 0) return null;
+/** The one line of "when" a compact row has room for: a date and time for anything
+ * timed, a check-in date and night count for a hotel, the date alone otherwise. */
+function laterRowMeta(booking: Booking, accommodation?: Accommodation): string | null {
+  if (booking.kind === 'hotel') {
+    const checkIn = accommodation?.checkIn ?? booking.date;
+    const checkOut = accommodation?.checkOut ?? booking.endDate;
+    if (!checkOut) return formatDayLabel(checkIn);
+    const nights = daysBetween(checkIn, checkOut);
+    return `${formatDayLabel(checkIn)} · ${nights} night${nights === 1 ? '' : 's'}`;
+  }
+  if (booking.depart) return `${formatDayLabel(booking.date)} · ${booking.depart}`;
+  return formatDayLabel(booking.date);
+}
+
+/** One line per booking in "Later" and "Past": the category badge, the title, when it
+ * is, and the one fact most worth a glance without opening it - a seat, or else the
+ * status word the pass card already leads with. */
+function BookingRow({
+  tripId,
+  booking,
+  accommodation,
+}: {
+  tripId: ID;
+  booking: Booking;
+  accommodation?: Accommodation;
+}) {
+  const category = bookingCategory(booking.kind);
+  const meta = laterRowMeta(booking, accommodation);
+  const firstCoach = booking.passengers?.[0]?.coach;
+  const fact = firstCoach ? `Coach ${firstCoach}` : ROW_STATUS_WORDS[booking.status];
   return (
-    <Card className="mb-4 border-amber-300 dark:border-amber-700">
-      <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-200">
-        <AlertTriangle size={14} aria-hidden /> Still to book ({entries.length})
-      </p>
-      <div>
-        {entries.map((entry) => {
-          const label = urgencyLabel(entry);
-          return (
-            <Link
-              key={entry.booking.id}
-              to={`/t/${tripId}/bookings/${entry.booking.id}`}
-              className="flex items-center justify-between gap-2 rounded-lg px-1 py-1 text-sm hover:bg-amber-100/50 dark:hover:bg-amber-900/20"
-            >
-              <span className="min-w-0 truncate">{entry.booking.title}</span>
-              <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">
-                {label.text}
-              </span>
-            </Link>
-          );
-        })}
+    <Link
+      to={`/t/${tripId}/bookings/${booking.id}`}
+      className="flex min-h-[56px] items-center gap-3 border-t border-slate-100 py-2 first:border-t-0 dark:border-slate-700"
+    >
+      <CategoryIcon category={category} size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">{booking.title}</p>
+        {meta ? <p className="truncate text-xs text-slate-500">{meta}</p> : null}
       </div>
-    </Card>
+      <span className="shrink-0 text-xs whitespace-nowrap text-slate-500">{fact}</span>
+    </Link>
+  );
+}
+
+/** The single line that replaces a whole section for "not yet booked": how many, and the
+ * soonest one worth acting on. Everything still to book stays reachable from here, via
+ * the status filter, rather than crowding the board with a list of its own. */
+function StillToBookStrip({ tripId, entries }: { tripId: ID; entries: BookByEntry[] }) {
+  const first = entries[0];
+  if (!first) return null;
+  const byDate = first.result.date ? `, by ${shortDate(first.result.date)}` : '';
+  return (
+    <Link
+      to={`/t/${tripId}/bookings?status=to_book`}
+      className="bg-brand-100 text-brand-800 dark:bg-brand-900/40 dark:text-brand-100 mb-4 flex items-center gap-2.5 rounded-2xl px-3.5 py-3 text-sm font-semibold"
+    >
+      <AlertTriangle size={17} className="shrink-0" aria-hidden />
+      <span className="flex-1">
+        {entries.length} still to book · {first.booking.title}
+        {byDate}
+      </span>
+      <ChevronRight size={17} className="shrink-0" aria-hidden />
+    </Link>
+  );
+}
+
+/** The board's own category row: an "All" pill plus one per bucket, ink-filled when
+ * selected rather than the app-wide FilterChips' brand tint - the board is dense enough
+ * that the active filter needs the strongest possible contrast. */
+function CategoryTabRow({
+  active,
+  onSelect,
+  counts,
+}: {
+  active: Category | null;
+  onSelect: (value: Category | null) => void;
+  counts: Partial<Record<Category | 'all', number>>;
+}) {
+  return (
+    <div className="mb-4 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Booking type">
+      {CATEGORY_TABS.map((tab) => {
+        const isActive = tab.value === 'all' ? active === null : active === tab.value;
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onSelect(tab.value === 'all' ? null : tab.value)}
+            className={cn(
+              'inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold whitespace-nowrap transition',
+              isActive
+                ? 'border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900'
+                : 'border-slate-300 bg-white text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100',
+            )}
+          >
+            {tab.label}
+            <span className="opacity-60">{counts[tab.value] ?? 0}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -404,28 +553,52 @@ export function BookingsBoardPage() {
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
 
   const activeParam = params.get('category');
-  const active = new Set<Category>(
-    activeParam && CATEGORY_FILTERS.some((f) => f.value === activeParam)
-      ? [activeParam as Category]
-      : [],
-  );
+  const active: Category | null =
+    activeParam && CATEGORY_TABS.some((t) => t.value === activeParam)
+      ? (activeParam as Category)
+      : null;
+  const statusParam = params.get('status');
 
-  const toggleCategory = (value: Category) => {
-    if (params.get('category') === value) params.delete('category');
-    else params.set('category', value);
-    setParams(params, { replace: true });
-  };
-  const clearCategory = () => {
-    params.delete('category');
+  const setCategory = (value: Category | null) => {
+    if (value) params.set('category', value);
+    else params.delete('category');
     setParams(params, { replace: true });
   };
 
-  const filtered =
-    active.size === 0
-      ? entries
-      : entries.filter((e) => active.has(bookingCategory(e.booking.kind)));
-  const stillToBook = filtered.filter((e) => e.booking.status === 'to_book');
-  const groups = groupByDate(filtered);
+  const categoryFiltered = active
+    ? entries.filter((e) => bookingCategory(e.booking.kind) === active)
+    : entries;
+  const filtered = statusParam
+    ? categoryFiltered.filter((e) => e.booking.status === statusParam)
+    : categoryFiltered;
+
+  const stillToBook = categoryFiltered.filter((e) => e.booking.status === 'to_book');
+
+  // Once booked, a thing belongs in Next up, Later or Past by date. Still-to-book only
+  // shows there when the strip's own filter is the one asking to see it - otherwise it
+  // stays folded into the strip above, not duplicated below it.
+  const sectioned =
+    statusParam === 'to_book' ? filtered : filtered.filter((e) => e.booking.status !== 'to_book');
+  const upcoming = sectioned
+    .filter((e) => e.booking.date >= today)
+    .sort(
+      (a, b) =>
+        a.booking.date.localeCompare(b.booking.date) ||
+        (a.booking.depart ?? '').localeCompare(b.booking.depart ?? ''),
+    );
+  const past = sectioned
+    .filter((e) => e.booking.date < today)
+    .sort(
+      (a, b) =>
+        b.booking.date.localeCompare(a.booking.date) ||
+        (b.booking.depart ?? '').localeCompare(a.booking.depart ?? ''),
+    );
+  // Next up is for things you hold a ticket or reservation for. "Buy on the day" sights
+  // shown as ticket cards would send a first-time visitor to a queue expecting to walk in.
+  const isHeld = (e: (typeof upcoming)[number]) =>
+    e.booking.status === 'booked' || e.booking.status === 'confirmed';
+  const nextUp = upcoming.filter(isHeld).slice(0, 3);
+  const later = upcoming.filter((e) => !nextUp.includes(e));
 
   const accommodationByBookingId = new Map(
     bundle.accommodations.filter((a) => a.bookingId).map((a) => [a.bookingId as ID, a]),
@@ -439,10 +612,14 @@ export function BookingsBoardPage() {
     );
   }
 
+  const nothingAtAll =
+    nextUp.length === 0 && later.length === 0 && past.length === 0 && stillToBook.length === 0;
+
   return (
     <>
       <PageHeader
-        title="Bookings"
+        title="Wallet"
+        subtitle="Every ticket, pass and booking, ready to show"
         actions={
           !addingBooking ? (
             <Button variant="primary" onClick={() => setAddingBooking(true)}>
@@ -460,47 +637,75 @@ export function BookingsBoardPage() {
         />
       ) : null}
 
-      <FilterChips
-        label="Filter by category"
-        options={CATEGORY_FILTERS.map((f) => ({
-          value: f.value,
-          label: f.label,
-          count: entries.filter((e) => bookingCategory(e.booking.kind) === f.value).length,
-        }))}
+      <CategoryTabRow
         active={active}
-        onToggle={toggleCategory}
-        onClear={clearCategory}
+        onSelect={setCategory}
+        counts={{
+          all: entries.length,
+          transport: entries.filter((e) => bookingCategory(e.booking.kind) === 'transport').length,
+          stay: entries.filter((e) => bookingCategory(e.booking.kind) === 'stay').length,
+          activity: entries.filter((e) => bookingCategory(e.booking.kind) === 'activity').length,
+          food: entries.filter((e) => bookingCategory(e.booking.kind) === 'food').length,
+          pass: entries.filter((e) => bookingCategory(e.booking.kind) === 'pass').length,
+        }}
       />
 
-      <StillToBookCallout tripId={bundle.trip.id} entries={stillToBook} />
+      <StillToBookStrip tripId={bundle.trip.id} entries={stillToBook} />
 
-      {groups.length === 0 ? (
+      {nothingAtAll ? (
         <EmptyState title="Nothing here yet.">
-          {active.size > 0 ? 'Nothing in this category.' : 'Add a booking to get started.'}
+          {active ? 'Nothing in this category.' : 'Add a booking to get started.'}
         </EmptyState>
       ) : (
-        groups.map((group) => {
-          const city = bundle.days.find((d) => d.date === group.date)?.city;
-          return (
-            <div key={group.date} className="mb-4">
-              <h2 className="mb-1.5 text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
-                {formatDayLabel(group.date)}
-                {city ? ` · ${city}` : ''}
+        <>
+          {nextUp.length > 0 ? (
+            <div className="mb-5">
+              <h2 className="mb-2.5 text-xs font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                Next up
               </h2>
-              <div className="space-y-1.5">
-                {group.entries.map((entry) => (
+              {nextUp.map((entry) => (
+                <PassCard
+                  key={entry.booking.id}
+                  tripId={bundle.trip.id}
+                  booking={entry.booking}
+                  accommodation={accommodationByBookingId.get(entry.booking.id)}
+                  documentCount={documentCountByBookingId.get(entry.booking.id) ?? 0}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {later.length > 0 ? (
+            <div className="mb-5">
+              <h2 className="mb-2.5 text-xs font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                Later
+              </h2>
+              <div className="rounded-2xl border border-slate-200 bg-white px-3.5 dark:border-slate-700 dark:bg-slate-800">
+                {later.map((entry) => (
                   <BookingRow
                     key={entry.booking.id}
                     tripId={bundle.trip.id}
-                    entry={entry}
+                    booking={entry.booking}
                     accommodation={accommodationByBookingId.get(entry.booking.id)}
-                    documentCount={documentCountByBookingId.get(entry.booking.id) ?? 0}
                   />
                 ))}
               </div>
             </div>
-          );
-        })
+          ) : null}
+
+          {past.length > 0 ? (
+            <Disclosure title={`Past (${past.length})`}>
+              {past.map((entry) => (
+                <BookingRow
+                  key={entry.booking.id}
+                  tripId={bundle.trip.id}
+                  booking={entry.booking}
+                  accommodation={accommodationByBookingId.get(entry.booking.id)}
+                />
+              ))}
+            </Disclosure>
+          ) : null}
+        </>
       )}
     </>
   );
@@ -737,139 +942,245 @@ function BookingEditForm({
   );
 }
 
-/** One row per traveller named on the ticket, compact enough to sit above the fold. */
-function PassengersCard({ passengers }: { passengers: Passenger[] }) {
-  return (
-    <Section title="Passengers">
-      <Card>
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-          {passengers.map((passenger, index) => {
-            const seatLine = passengerSeatLine(passenger);
-            return (
-              <div key={index} className={index > 0 ? 'pt-2' : undefined}>
-                <p className="font-medium">{passenger.name}</p>
-                {seatLine ? <p className="text-sm text-slate-500">{seatLine}</p> : null}
-                {passenger.ticketNumber ? (
-                  <p className="font-mono text-xs text-slate-400">{passenger.ticketNumber}</p>
-                ) : null}
-                {passenger.note ? (
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{passenger.note}</p>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-    </Section>
-  );
-}
-
-/** The one fact worth reading out at a desk, large enough to read at arm's length, with
- * a Copy button so it never has to be retyped off a phone screen. */
-function ReferenceFact({ reference }: { reference: string }) {
+/** The one fact worth reading out at a desk: masked by default so it survives being read
+ * over someone's shoulder, with an eye to reveal it and a Copy button so it never has to
+ * be retyped off a phone screen. Both controls are icon-only, so both carry an
+ * `aria-label` that changes with their state. */
+function ReferenceFact({ reference, label = 'Reference' }: { reference: string; label?: string }) {
+  const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
-    await navigator.clipboard.writeText(reference);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(reference);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be refused (no permission, an insecure context, an older
+      // browser). The reference is still on screen and can be read out or typed by hand.
+    }
   };
 
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-          Reference
+        <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">{label}</p>
+        <p className="truncate font-mono text-lg font-semibold tracking-wide">
+          {revealed ? reference : maskReference(reference)}
         </p>
-        <p className="truncate font-mono text-lg font-semibold">{reference}</p>
       </div>
-      <Button onClick={() => void copy()}>
-        {copied ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}
-        {copied ? 'Copied' : 'Copy'}
-      </Button>
+      <div className="flex shrink-0 gap-2">
+        {/* Button doesn't forward arbitrary props, so the accessible name has to be a
+            visually-hidden child rather than an `aria-label` on the element itself. */}
+        <Button onClick={() => setRevealed((r) => !r)}>
+          {revealed ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+          <span className="sr-only">{revealed ? 'Hide reference' : 'Show reference'}</span>
+        </Button>
+        <Button onClick={() => void copy()}>
+          {copied ? <Check size={15} aria-hidden /> : <Copy size={15} aria-hidden />}
+          <span className="sr-only">{copied ? 'Copied' : 'Copy reference'}</span>
+        </Button>
+      </div>
     </div>
   );
 }
 
 /**
- * The first screen a traveller needs at a barrier or a front desk: when, where, the
- * reference to read out, and who to blame if it goes wrong. A hotel gets check-in/out and
- * an address instead of a depart/arrive pair.
+ * The ticket itself: departure and arrival side by side in the largest type on the
+ * screen, a dashed tear line, then who is sitting where and the reference to read out at
+ * the barrier.
  */
-function KeyFactsCard({
+function TransportTicketCard({ booking }: { booking: Booking }) {
+  const category = bookingCategory(booking.kind);
+  const duration = durationLabel(booking);
+  const passengers = booking.passengers ?? [];
+
+  return (
+    <section
+      aria-label="Ticket"
+      className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+    >
+      <div className={cn('p-4', CATEGORY_META[category].tone)}>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+          <div>
+            <p className="font-display text-4xl leading-none font-semibold text-slate-900 dark:text-slate-50">
+              {booking.depart ?? '—'}
+            </p>
+            {booking.from ? (
+              <p className="mt-1.5 text-sm font-semibold">{booking.from.name}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-center gap-1 pb-1 text-xs font-semibold">
+            <ArrowRight size={20} aria-hidden />
+            {duration ? <span className="whitespace-nowrap">{duration}</span> : null}
+          </div>
+          <div className="text-right">
+            <p className="font-display text-4xl leading-none font-semibold text-slate-900 dark:text-slate-50">
+              {booking.arrive ?? '—'}
+            </p>
+            {booking.to ? <p className="mt-1.5 text-sm font-semibold">{booking.to.name}</p> : null}
+          </div>
+        </div>
+      </div>
+
+      {passengers.length > 0 ? (
+        <>
+          <div className="mx-3.5 border-t-2 border-dashed border-slate-200 dark:border-slate-700" />
+          <div className="grid grid-cols-2 gap-3.5 p-4">
+            {passengers.map((passenger, index) => (
+              <Fact
+                key={index}
+                label={passenger.name}
+                value={passengerSeatLine(passenger) ?? '—'}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {booking.reference ? (
+        <div
+          className={cn(
+            'p-4',
+            passengers.length > 0 ? 'border-t border-slate-100 dark:border-slate-700' : '',
+          )}
+        >
+          <ReferenceFact reference={booking.reference} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Check-in and check-out side by side, tinted like a hotel, then the address, the way
+ * there, and the reference. */
+function HotelStayCard({
   booking,
   accommodation,
+  documentCount,
+  onOpenDocuments,
 }: {
   booking: Booking;
   accommodation?: Accommodation;
+  documentCount: number;
+  onOpenDocuments: () => void;
 }) {
-  const isHotel = booking.kind === 'hotel';
-  const providerLine = [booking.operator, booking.provider].filter(Boolean).join(' via ');
+  const checkIn = accommodation?.checkIn ?? booking.date;
+  const checkOut = accommodation?.checkOut ?? booking.endDate;
+  const nights = checkOut ? daysBetween(checkIn, checkOut) : null;
+  const place = accommodation?.place ?? booking.to;
+
+  return (
+    <section
+      aria-label="Stay"
+      className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+    >
+      <div className={cn('grid grid-cols-2', CATEGORY_META.stay.tone)}>
+        <div className="border-r border-black/10 p-4 dark:border-white/10">
+          <p className="text-[11px] font-bold tracking-wide uppercase">Check in</p>
+          <p className="font-display mt-1 text-2xl font-semibold">{formatDayLabel(checkIn)}</p>
+          {accommodation?.checkInTime ? (
+            <p className="mt-0.5 text-xs opacity-80">from {accommodation.checkInTime}</p>
+          ) : null}
+        </div>
+        <div className="p-4">
+          <p className="text-[11px] font-bold tracking-wide uppercase">Check out</p>
+          <p className="font-display mt-1 text-2xl font-semibold">
+            {checkOut ? formatDayLabel(checkOut) : '—'}
+          </p>
+          {nights != null ? (
+            <p className="mt-0.5 text-xs opacity-80">
+              {nights} night{nights === 1 ? '' : 's'}
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="space-y-3.5 p-4">
+        {place ? (
+          <div className="flex items-start gap-2.5">
+            <MapPin size={18} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />
+            <div className="min-w-0">
+              <p className="font-medium">{place.address ?? place.name}</p>
+              {place.address ? (
+                <p className="text-sm text-slate-500">
+                  {[place.city, place.zone].filter(Boolean).join(' · ') || place.name}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {place || documentCount > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {place ? (
+              <OutLink href={placeUrl(place)}>
+                Directions <MapPin size={14} className="ml-1.5" aria-hidden />
+              </OutLink>
+            ) : null}
+            {documentCount > 0 ? <Button onClick={onOpenDocuments}>Confirmation</Button> : null}
+          </div>
+        ) : null}
+
+        {booking.reference ? (
+          <ReferenceFact
+            reference={booking.reference}
+            label={booking.provider ? `${booking.provider} reference` : 'Reference'}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** Everything a simpler booking needs: when, the reference, and who it is for - a
+ * museum ticket or a restaurant table has no ticket-shaped card of its own. */
+function OtherKeyFactsCard({ booking }: { booking: Booking }) {
+  const whenValue = booking.depart
+    ? `${formatDayLabel(booking.date)} · ${booking.depart}${
+        booking.arrive ? ` → ${booking.arrive}` : ''
+      }`
+    : formatDayLabel(booking.date);
 
   return (
     <Card className="mb-4">
       <div className="space-y-3">
-        {isHotel ? (
-          <>
-            <Fact
-              label="Check-in"
-              value={`${formatDayLabel(accommodation?.checkIn ?? booking.date)}${
-                accommodation?.checkInTime ? ` · ${accommodation.checkInTime}` : ''
-              }`}
-            />
-            <Fact
-              label="Check-out"
-              value={`${formatDayLabel(accommodation?.checkOut ?? booking.endDate ?? booking.date)}${
-                accommodation?.checkOutTime ? ` · ${accommodation.checkOutTime}` : ''
-              }`}
-            />
-            {accommodation?.place ? (
-              <div>
-                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-                  Address
-                </p>
-                <p className="text-sm">{accommodation.place.address ?? accommodation.place.name}</p>
-                <OutLink href={placeUrl(accommodation.place)}>
-                  Open in Maps <ExternalLink size={13} className="ml-1.5" aria-hidden />
-                </OutLink>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Fact
-              label="When"
-              value={
-                booking.depart
-                  ? `${formatDayLabel(booking.date)} · ${booking.depart}${
-                      booking.arrive ? ` → ${booking.arrive}` : ''
-                    }${
-                      booking.arriveDate && booking.arriveDate !== booking.date
-                        ? ` (arrives ${formatDayLabel(booking.arriveDate)})`
-                        : ''
-                    }`
-                  : formatDayLabel(booking.date)
-              }
-            />
-            {booking.from && booking.to ? (
-              <div>
-                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-                  Route
-                </p>
-                <p className="text-sm">
-                  {booking.from.name} → {booking.to.name}
-                </p>
-                <OutLink href={placeUrl(booking.to)}>
-                  {booking.to.name} on the map{' '}
-                  <ExternalLink size={13} className="ml-1.5" aria-hidden />
-                </OutLink>
-              </div>
-            ) : null}
-          </>
-        )}
+        <Fact label="When" value={whenValue} />
+
+        {booking.from && booking.to ? (
+          <div>
+            <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+              Route
+            </p>
+            <p className="text-sm">
+              {booking.from.name} → {booking.to.name}
+            </p>
+            <OutLink href={placeUrl(booking.to)}>
+              {booking.to.name} on the map <ExternalLink size={13} className="ml-1.5" aria-hidden />
+            </OutLink>
+          </div>
+        ) : null}
 
         {booking.reference ? <ReferenceFact reference={booking.reference} /> : null}
-        {providerLine ? <Fact label="Operator" value={providerLine} /> : null}
+
+        {booking.passengers?.length ? (
+          <div>
+            <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+              Passengers
+            </p>
+            <div className="mt-1 space-y-1.5">
+              {booking.passengers.map((passenger, index) => {
+                const seatLine = passengerSeatLine(passenger);
+                return (
+                  <p key={index} className="text-sm">
+                    <span className="font-medium">{passenger.name}</span>
+                    {seatLine ? <span className="text-slate-500"> · {seatLine}</span> : null}
+                  </p>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
     </Card>
   );
@@ -890,9 +1201,11 @@ export function BookingDetailPage() {
   const { tripId, bookingId } = useParams();
   const bundle = useTripBundle(tripId);
   const today = useToday(bundle?.trip.defaultTimeZone);
-  const navigate = useNavigate();
+  const audit = useAudit(bundle, today);
   const documents = useDocumentsFor('booking', bookingId);
   const [editing, setEditing] = useState(false);
+  const documentsSectionRef = useRef<HTMLDivElement>(null);
+  const firstDocumentRowRef = useRef<HTMLDivElement>(null);
 
   if (!bundle) return <p className="text-slate-500">Loading.</p>;
   const booking = bundle.bookings.find((b) => b.id === bookingId);
@@ -904,20 +1217,58 @@ export function BookingDetailPage() {
   const links = bookingLinks(booking, guide);
   const linked = itemsOfBooking(bundle, booking.id);
   const refundLine = refundWords(booking);
+  const category = bookingCategory(booking.kind);
+  const isTransport = category === 'transport';
+  const isHotel = booking.kind === 'hotel';
+
+  // A manual conflict is only worth a callout here while it is both about this booking
+  // and still unresolved - once cleared in Plan check, it should stop following the
+  // booking around.
+  const reviewConflict = bundle.conflicts.find(
+    (c) => c.id.startsWith('mc-review-') && c.bookingIds?.includes(booking.id),
+  );
+  const reviewOpen =
+    reviewConflict != null &&
+    audit.open.some((f) => f.ruleId === 'manual' && f.key === `manual|${reviewConflict.id}`);
+
+  const sameDayReturn = isTransport ? findSameDayReturn(bundle.bookings, booking) : undefined;
 
   const setStatus = (status: BookingStatus) => void bookingsRepo.setStatus(booking.id, status);
+
+  // "Show tickets" and "Confirmation" both do the same thing: open the one document that
+  // matters, or - when there is more than one - open the Documents disclosure and let the
+  // traveller pick. DocumentRow owns the actual open behaviour; this simulates the tap on
+  // it rather than duplicating it, so both stay a single implementation.
+  const openDocuments = () => {
+    const details = documentsSectionRef.current?.querySelector('details');
+    if (details) details.open = true;
+    if (documents.length === 1) {
+      firstDocumentRowRef.current?.querySelector('button')?.click();
+    } else {
+      documentsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const title = isTransport
+    ? [booking.from?.city ?? booking.from?.name, booking.to?.city ?? booking.to?.name]
+        .filter(Boolean)
+        .join(' → ') || booking.title
+    : booking.title;
+  const subtitle = isTransport
+    ? `${booking.operator ?? KIND_WORDS[booking.kind]} · ${formatDayLabel(booking.date)}`
+    : `${formatDayLabel(booking.date)}${booking.depart ? ` at ${booking.depart}` : ''}`;
 
   return (
     <>
       <PageHeader
-        title={booking.title}
-        subtitle={`${formatDayLabel(booking.date)}${booking.depart ? ` at ${booking.depart}` : ''}`}
-        actions={
-          <>
-            {!editing ? <Button onClick={() => setEditing(true)}>Edit</Button> : null}
-            <Button onClick={() => void navigate(-1)}>Back</Button>
-          </>
+        kicker={
+          <Link to={`/t/${bundle.trip.id}/bookings`} className="inline-flex items-center gap-0.5">
+            <ChevronLeft size={16} aria-hidden /> Wallet
+          </Link>
         }
+        title={title}
+        subtitle={subtitle}
+        actions={!editing ? <Button onClick={() => setEditing(true)}>Edit</Button> : undefined}
       />
 
       {editing ? (
@@ -929,53 +1280,122 @@ export function BookingDetailPage() {
         />
       ) : (
         <>
-          <KeyFactsCard booking={booking} accommodation={accommodation} />
+          {isTransport ? (
+            <TransportTicketCard booking={booking} />
+          ) : isHotel ? (
+            <HotelStayCard
+              booking={booking}
+              accommodation={accommodation}
+              documentCount={documents.length}
+              onOpenDocuments={openDocuments}
+            />
+          ) : (
+            <OtherKeyFactsCard booking={booking} />
+          )}
 
-          {booking.passengers?.length ? <PassengersCard passengers={booking.passengers} /> : null}
+          {isTransport && documents.length > 0 ? (
+            <Button
+              variant="primary"
+              className="mb-4 flex w-full items-center justify-center gap-2"
+              onClick={openDocuments}
+            >
+              Show tickets ({documents.length})
+            </Button>
+          ) : null}
 
-          <Section title="Documents">
-            <div className="mb-2">
-              <AttachDocumentButton
-                tripId={bundle.trip.id}
-                attachedTo={{ kind: 'booking', id: booking.id }}
-                label="Attach a ticket or confirmation"
-              />
-            </div>
-            {documents.length > 0 ? (
-              <div className="space-y-2">
-                {documents.map((doc) => (
-                  <DocumentRow key={doc.id} doc={doc} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">Nothing filed against this booking yet.</p>
-            )}
-          </Section>
-
-          {booking.notes ? (
-            <Section title="Notes">
+          {isHotel && booking.cost ? (
+            <Section title="Paid">
               <Card>
-                <p className="text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">
-                  {booking.notes}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {booking.cost.currency}{' '}
+                    {booking.cost.amount != null ? booking.cost.amount.toFixed(2) : '—'}
+                  </span>
+                  <span className="text-sm text-slate-500">
+                    {booking.cost.paid ? 'Paid' : 'Not paid yet'}
+                    {booking.cost.note ? ` · ${booking.cost.note}` : ''}
+                  </span>
+                </div>
               </Card>
             </Section>
           ) : null}
 
-          {refundLine ? (
-            <p
-              className={cn(
-                'mb-4 text-sm font-medium',
-                booking.refundable === false
-                  ? 'text-rose-700 dark:text-rose-300'
-                  : 'text-slate-600 dark:text-slate-300',
-              )}
-            >
-              {refundLine}
-            </p>
+          {reviewConflict && reviewOpen ? (
+            <div className="bg-brand-100 text-brand-800 dark:bg-brand-900/40 dark:text-brand-100 mb-4 rounded-2xl p-3.5 text-sm">
+              <p className="flex items-center gap-2 font-bold">
+                <AlertTriangle size={16} aria-hidden /> To review
+              </p>
+              <p className="mt-1 text-slate-900 dark:text-slate-100">{reviewConflict.detail}</p>
+              <Link
+                to={`/t/${bundle.trip.id}/conflicts`}
+                className="mt-1.5 inline-block font-bold underline"
+              >
+                Decide in Plan check
+              </Link>
+            </div>
+          ) : null}
+
+          {refundLine || booking.notes || sameDayReturn ? (
+            <Section title="Good to know">
+              <Card>
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {refundLine ? (
+                    <div className="flex items-start gap-2.5 py-2 first:pt-0">
+                      <Check
+                        size={16}
+                        className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300"
+                        aria-hidden
+                      />
+                      <span>{refundLine}</span>
+                    </div>
+                  ) : null}
+                  {booking.notes ? (
+                    <p className="py-2 whitespace-pre-wrap text-slate-600 first:pt-0 dark:text-slate-300">
+                      {booking.notes}
+                    </p>
+                  ) : null}
+                  {sameDayReturn ? (
+                    <p className="py-2 first:pt-0">
+                      Return: {sameDayReturn.depart ? `${sameDayReturn.depart} → ` : ''}
+                      {sameDayReturn.to?.city ?? sameDayReturn.to?.name ?? sameDayReturn.title}
+                      {' · '}
+                      <Link
+                        to={`/t/${bundle.trip.id}/bookings/${sameDayReturn.id}`}
+                        className="text-brand-700 dark:text-brand-300 font-semibold"
+                      >
+                        open
+                      </Link>
+                    </p>
+                  ) : null}
+                </div>
+              </Card>
+            </Section>
           ) : null}
 
           <div className="mb-4 space-y-2">
+            <div ref={documentsSectionRef}>
+              <Disclosure title="Documents" count={documents.length}>
+                <div className="mb-2">
+                  <AttachDocumentButton
+                    tripId={bundle.trip.id}
+                    attachedTo={{ kind: 'booking', id: booking.id }}
+                    label="Attach a ticket or confirmation"
+                  />
+                </div>
+                {documents.length > 0 ? (
+                  <div className="space-y-2">
+                    {documents.map((doc, index) => (
+                      <div key={doc.id} ref={index === 0 ? firstDocumentRowRef : undefined}>
+                        <DocumentRow doc={doc} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Nothing filed against this booking yet.</p>
+                )}
+              </Disclosure>
+            </div>
+
             <Disclosure title="Change booking status">
               <div className="flex flex-wrap gap-2">
                 {(

@@ -1,9 +1,11 @@
 /**
  * The day timeline and the detail view of one item.
  *
- * The timeline is the screen that gets used while standing up, so it carries the tag
- * filter that strips a day back to essentials, the done and skip controls, and the
- * weather swap.
+ * The timeline is the screen that gets used while standing up. The default view answers
+ * "what's next" in a glance - a Next up card, tonight and tomorrow at a glance, and a
+ * timeline where a walk to the next stop is a line between rows, not a row of its own.
+ * Edit mode is a different screen behind an explicit toggle: full rows with done/skip/move,
+ * the tag filter, and adding an item - the machinery nobody wants while reading the plan.
  */
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -11,15 +13,23 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
+  BedDouble,
+  Bus,
+  Car,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   ExternalLink,
+  Footprints,
+  Navigation,
   Plus,
   SkipForward,
+  Ticket,
+  TrainFront,
 } from 'lucide-react';
+import { TZDate } from '@date-fns/tz';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -36,7 +46,7 @@ import {
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { accommodationForDate, bookingOf, itemsForDay, orderedDays } from '@/domain/bundle';
-import { formatDayLabel, toMinutes } from '@/domain/time';
+import { daysBetween, dayTimeZone, formatDayLabel, toMinutes, weekdayOf } from '@/domain/time';
 import { daysRepo, itemsRepo } from '@/db/repo';
 import { describeHours } from '@/domain/hours';
 import { itemLinks } from '@/playbook/deepLinks';
@@ -45,6 +55,7 @@ import { useAudit, useToday, useTripBundle } from '@/hooks/useTrip';
 import { bookingCategory, itemCategory } from '@/domain/categories';
 import type { DaySwapPlan } from '@/domain/swap';
 import type {
+  Accommodation,
   Booking,
   Day,
   ID,
@@ -53,7 +64,9 @@ import type {
   Passenger,
   Tag,
   TimeLabel,
+  TravelMode,
   TripBundle,
+  Weekday,
 } from '@/domain/types';
 import { TAGS } from '@/domain/types';
 
@@ -96,6 +109,81 @@ function bookingWord(status: Booking['status']): string | null {
   if (status === 'on_site') return 'Buy on the day';
   if (status === 'booked' || status === 'confirmed') return 'Booked';
   return null;
+}
+
+/** The walks and hops between two stops - shown as a connector line, never a row of their own. */
+const LOCAL_TRAVEL_MODES = new Set<TravelMode>(['walk', 'metro', 'tram', 'bus', 'taxi', 'shuttle']);
+
+const MODE_WORDS: Partial<Record<TravelMode, string>> = {
+  walk: 'Walk',
+  metro: 'Metro',
+  tram: 'Tram',
+  bus: 'Bus',
+  taxi: 'Taxi',
+  shuttle: 'Shuttle',
+};
+
+const MODE_ICONS: Partial<Record<TravelMode, typeof Bus>> = {
+  walk: Footprints,
+  metro: TrainFront,
+  tram: TrainFront,
+  bus: Bus,
+  taxi: Car,
+  shuttle: Bus,
+};
+
+/** A transport/transfer item that is a local hop rather than the journey itself. */
+function isLocalConnector(item: Item): boolean {
+  return (
+    (item.type === 'transport' || item.type === 'transfer') &&
+    !!item.travel &&
+    LOCAL_TRAVEL_MODES.has(item.travel.mode)
+  );
+}
+
+const WEEKDAY_FULL: Record<Weekday, string> = {
+  mon: 'Monday',
+  tue: 'Tuesday',
+  wed: 'Wednesday',
+  thu: 'Thursday',
+  fri: 'Friday',
+  sat: 'Saturday',
+  sun: 'Sunday',
+};
+
+const MONTH_FULL = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** "Sunday 27 September" - the header spells the date out in full; the nav buttons abbreviate. */
+function formatFullDate(date: Day['date']): string {
+  const parts = date.split('-');
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  return `${WEEKDAY_FULL[weekdayOf(date)]} ${day} ${MONTH_FULL[month - 1] ?? ''}`;
+}
+
+/** "Sat 26 Sep" -> "Sat 26": all the prev/next buttons have room for. */
+function shortNavDate(date: Day['date']): string {
+  const [weekday, day] = formatDayLabel(date).split(' ');
+  return `${weekday} ${day}`;
+}
+
+/** The wall-clock minute of day right now, in the zone the viewed day runs on. */
+function nowMinutesInZone(timeZone: string): number {
+  const now = new TZDate(new Date(), timeZone);
+  return now.getHours() * 60 + now.getMinutes();
 }
 
 type TimeGroup = 'morning' | 'afternoon' | 'evening' | 'any';
@@ -151,7 +239,8 @@ function passengerSeatSummary(passengers: Passenger[]): string | null {
  * One line in the day, ~48-56px tall by default: icon, time, title, at most one note line,
  * and only the chips that earn their place. Everything else - done/skip/move - is edit
  * machinery, and edit machinery is what made a normal day 2300px tall, so it only appears
- * once `editMode` says the traveller asked for it.
+ * once `editMode` says the traveller asked for it. Used in edit mode only; the read view
+ * below is `CompactRow`.
  */
 function ItemRow({
   item,
@@ -270,6 +359,106 @@ function ItemRow({
 }
 
 /**
+ * A row in the read view: time, a status dot, title with at most one note line and its
+ * chips, and the category icon. No controls - tapping it opens the item.
+ */
+function CompactRow({
+  item,
+  bundle,
+  isCurrent,
+}: {
+  item: Item;
+  bundle: TripBundle;
+  isCurrent: boolean;
+}) {
+  const booking = bookingOf(bundle, item);
+  const done = item.status === 'done';
+  const skipped = item.status === 'skipped';
+  const bookingWordText = booking ? bookingWord(booking.status) : null;
+
+  return (
+    <Link
+      to={`/t/${bundle.trip.id}/items/${item.id}`}
+      className={cn(
+        'grid grid-cols-[44px_22px_minmax(0,1fr)_32px] items-start gap-x-2.5 py-2.5',
+        skipped && 'opacity-50',
+      )}
+    >
+      <span className="pt-px text-right text-xs font-semibold text-slate-500 tabular-nums dark:text-slate-400">
+        {/* The section heading already says morning or afternoon; only a real time earns
+            the column. */}
+        {item.time ? `${item.timeApprox ? '~' : ''}${item.time}` : ''}
+      </span>
+      <span
+        className={cn(
+          'mt-px box-border flex h-5 w-5 items-center justify-center rounded-full border-2',
+          done
+            ? 'border-emerald-400 bg-emerald-100 dark:border-emerald-500 dark:bg-emerald-900/40'
+            : isCurrent
+              ? 'border-brand-600 bg-brand-600 ring-brand-100 dark:ring-brand-900/40 ring-4'
+              : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800',
+        )}
+      >
+        {done ? (
+          <Check size={12} className="text-emerald-700 dark:text-emerald-300" aria-hidden />
+        ) : null}
+      </span>
+      <span className="min-w-0">
+        <span
+          className={cn(
+            'block font-medium',
+            done && 'text-slate-500 line-through dark:text-slate-400',
+          )}
+        >
+          {item.title}
+        </span>
+        {item.notes ? (
+          <span className="mt-0.5 line-clamp-1 block text-sm text-slate-500 dark:text-slate-400">
+            {item.notes}
+          </span>
+        ) : null}
+        {item.tags.length > 0 || bookingWordText ? (
+          <span className="mt-1.5 flex flex-wrap gap-1.5">
+            {item.tags.map((tag) => (
+              <Chip key={tag} tone={TAG_TONES[tag]}>
+                {TAG_WORDS[tag]}
+              </Chip>
+            ))}
+            {bookingWordText ? (
+              <Chip tone={bookingWordText === 'Booked' ? 'good' : 'warn'}>{bookingWordText}</Chip>
+            ) : null}
+          </span>
+        ) : null}
+      </span>
+      <CategoryIcon category={itemCategory(item.type)} size="sm" />
+    </Link>
+  );
+}
+
+/** A local hop between two rows: "Walk 6 min", never a tap target of its own. */
+function ConnectorLine({ item }: { item: Item }) {
+  const mode = item.travel?.mode;
+  if (!mode) return null;
+  const mins = item.travel?.durationMins ?? item.durationMins;
+  const Icon = MODE_ICONS[mode] ?? ArrowRight;
+  const label = MODE_WORDS[mode] ?? mode;
+
+  return (
+    <div className="grid grid-cols-[44px_22px_minmax(0,1fr)] items-center gap-x-2.5 py-1 text-xs text-slate-500 dark:text-slate-400">
+      <span />
+      <span className="flex justify-center">
+        <span className="h-6 w-0.5 bg-slate-200 dark:bg-slate-600" />
+      </span>
+      <span className="flex items-center gap-1.5">
+        <Icon size={14} aria-hidden />
+        {label}
+        {mins ? ` ${mins} min` : ''}
+      </span>
+    </div>
+  );
+}
+
+/**
  * The whole of adding a line: a title and, optionally, when it starts. Everything else
  * an item can carry is reachable afterwards through Edit, which is the point - a
  * twelve-field form before someone can write down "dinner at 8" is exactly the friction
@@ -353,82 +542,121 @@ function TicketRow({ tripId, booking }: { tripId: ID; booking: Booking }) {
   );
 }
 
-/**
- * The one thing this screen was missing: where you sleep tonight, and what is already
- * booked today. Everything else on the day is negotiable; these two things are not, so
- * they sit above the fold instead of buried in a 2300px scroll.
- */
-function DaySummaryCard({
-  bundle,
-  day,
-  prevDay,
-}: {
-  bundle: TripBundle;
-  day: Day;
-  prevDay: Day | undefined;
-}) {
-  const tonight = accommodationForDate(bundle, day.date);
-  const checkingOut = bundle.accommodations.find((a) => a.checkOut === day.date);
-  const leaving = prevDay && prevDay.city !== day.city;
-  // The journey that moves you, not the walk to the station: prefer a booked long-distance
-  // leg, then any long-distance leg, and never a walk or a metro hop.
-  const LOCAL_MODES = new Set(['walk', 'metro', 'tram', 'bus', 'taxi', 'shuttle']);
-  const longLegs = leaving
-    ? itemsForDay(bundle, day.id).filter(
-        (i) => i.travel && i.time && !LOCAL_MODES.has(i.travel.mode),
-      )
-    : [];
-  const moveItem = longLegs.find((i) => i.bookingId) ?? longLegs[0];
-  const tickets = bundle.bookings
-    .filter((b) => b.date === day.date && (b.status === 'booked' || b.status === 'confirmed'))
-    .sort((a, b) => (a.depart ?? '99:99').localeCompare(b.depart ?? '99:99'));
-
-  if (!tonight && !checkingOut && !moveItem && tickets.length === 0) return null;
-
+/** Everything already booked today: Wallet covers the rest, so this is a short list. */
+function TicketsTodayCard({ tripId, tickets }: { tripId: ID; tickets: Booking[] }) {
+  if (tickets.length === 0) return null;
   return (
     <Card className="mb-4">
-      <div className="space-y-2.5">
-        {checkingOut ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Check out by {checkingOut.checkOutTime ?? '10:00'}
-          </p>
-        ) : null}
+      <p className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+        Tickets today
+      </p>
+      <div>
+        {tickets.map((booking) => (
+          <TicketRow key={booking.id} tripId={tripId} booking={booking} />
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-        {moveItem?.travel && prevDay ? (
-          <p className="flex items-center gap-1.5 text-sm font-medium">
-            <ArrowRight size={14} className="shrink-0 text-slate-400" aria-hidden />
-            {prevDay.city} → {day.city} by {moveItem.travel.mode} {moveItem.time}
-          </p>
-        ) : null}
+interface NextUpDetails {
+  item: Item;
+  label: 'Next' | 'First';
+  travelHint: string | null;
+  detail: string;
+  bookingHref: string;
+  directionsUrl: string | null;
+}
 
-        {tonight ? (
-          <div className="flex items-center gap-2">
-            <CategoryIcon category="stay" size="sm" />
-            <p className="min-w-0 text-sm">
-              <span className="font-medium">Tonight: {tonight.name}</span>
-              {tonight.checkIn === day.date && tonight.checkInTime ? (
-                <span className="text-slate-500 dark:text-slate-400">
-                  {' '}
-                  · check-in from {tonight.checkInTime}
-                </span>
-              ) : null}
-            </p>
-          </div>
-        ) : null}
+/**
+ * The one thing to do right now (or, off the day itself, the first thing on it): a chip
+ * with the time, how far the previous leg was, the category, the title, one line of
+ * detail, and the two taps that follow from it - get there, or see the booking.
+ */
+function NextUpCard({ info }: { info: NextUpDetails }) {
+  const { item, label, travelHint, detail, bookingHref, directionsUrl } = info;
 
-        {tickets.length > 0 ? (
-          <div>
-            <p className="mb-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
-              Tickets today
-            </p>
-            <div>
-              {tickets.map((booking) => (
-                <TicketRow key={booking.id} tripId={bundle.trip.id} booking={booking} />
-              ))}
-            </div>
-          </div>
+  return (
+    <Card className="border-brand-200 dark:border-brand-700 mb-4">
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <span className="bg-brand-600 inline-flex h-[22px] items-center rounded-full px-2 text-xs font-semibold whitespace-nowrap text-white">
+          {label} · {item.time}
+        </span>
+        {travelHint ? (
+          <span className="text-sm text-slate-500 dark:text-slate-400">{travelHint} from here</span>
         ) : null}
       </div>
+      <div className="flex items-center gap-3">
+        <CategoryIcon category={itemCategory(item.type)} />
+        <div className="min-w-0">
+          <p className="font-display text-[22px] leading-[1.15] font-semibold">{item.title}</p>
+          {detail ? (
+            <p className="mt-0.5 line-clamp-1 text-sm text-slate-500 dark:text-slate-400">
+              {detail}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3.5 grid grid-cols-2 gap-2">
+        {directionsUrl ? (
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-slate-900 text-sm font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900"
+          >
+            <Navigation size={16} aria-hidden />
+            Directions
+          </a>
+        ) : (
+          <span />
+        )}
+        <Link
+          to={bookingHref}
+          className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700"
+        >
+          <Ticket size={16} aria-hidden />
+          Booking
+        </Link>
+      </div>
+    </Card>
+  );
+}
+
+/** Where you sleep tonight: the hotel and which night of the stay this is. */
+function TonightTile({ accommodation, day }: { accommodation: Accommodation; day: Day }) {
+  const nightNumber = daysBetween(accommodation.checkIn, day.date) + 1;
+  const totalNights = daysBetween(accommodation.checkIn, accommodation.checkOut);
+
+  return (
+    <Card>
+      <div className="flex items-center gap-1.5 text-xs font-bold tracking-wide text-[#6a4c93] uppercase dark:text-[#c9b3e0]">
+        <BedDouble size={15} aria-hidden />
+        Tonight
+      </div>
+      <p className="mt-1.5 leading-tight font-medium">{accommodation.name}</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Night {nightNumber} of {totalNights}
+      </p>
+    </Card>
+  );
+}
+
+/** The one thing worth knowing about tomorrow before it starts: what's first, and a warning. */
+function TomorrowTile({ firstItem, noteLine }: { firstItem: Item; noteLine: string | null }) {
+  return (
+    <Card>
+      <div className="text-brand-600 dark:text-brand-300 flex items-center gap-1.5 text-xs font-bold tracking-wide uppercase">
+        <AlertTriangle size={15} aria-hidden />
+        Tomorrow
+      </div>
+      <p className="mt-1.5 leading-tight font-medium">
+        {firstItem.title}
+        {firstItem.time ? ` at ${firstItem.time}` : ''}
+      </p>
+      {noteLine ? (
+        <p className="line-clamp-1 text-sm text-slate-500 dark:text-slate-400">{noteLine}</p>
+      ) : null}
     </Card>
   );
 }
@@ -461,7 +689,6 @@ export function DayTimelinePage() {
     setParams(params, { replace: true });
   };
 
-  const nextItem = day.date === today ? items.find((i) => i.status === 'planned') : undefined;
   const problems = audit.actionable.filter((f) => f.dayId === day.id);
   const swapGroup = bundle.trip.swapGroups?.find((g) => g.dayIds.includes(day.id));
   const swapPartners = orderedDays(bundle).filter(
@@ -470,13 +697,82 @@ export function DayTimelinePage() {
 
   const ordered = orderedDays(bundle);
   const dayIndex = ordered.findIndex((d) => d.id === day.id);
+  const totalIndex = ordered.length - 1;
   const prevDay = dayIndex > 0 ? ordered[dayIndex - 1] : undefined;
   const nextDay =
     dayIndex >= 0 && dayIndex < ordered.length - 1 ? ordered[dayIndex + 1] : undefined;
 
+  // The journey that moves you, not the walk to the station: prefer a booked long-distance
+  // leg, then any long-distance leg, and never a walk or a metro hop.
+  const leaving = prevDay && prevDay.city !== day.city;
+  const longLegs = leaving
+    ? allItems.filter((i) => i.travel && i.time && !LOCAL_TRAVEL_MODES.has(i.travel.mode))
+    : [];
+  const moveItem = longLegs.find((i) => i.bookingId) ?? longLegs[0];
+  const checkingOut = bundle.accommodations.find((a) => a.checkOut === day.date);
+  const tonight = accommodationForDate(bundle, day.date);
+  const tickets = bundle.bookings
+    .filter((b) => b.date === day.date && (b.status === 'booked' || b.status === 'confirmed'))
+    .sort((a, b) => (a.depart ?? '99:99').localeCompare(b.depart ?? '99:99'));
+
+  // The next (or, off today, the first) timed thing that is not travel itself - a walk or
+  // a train is how you get to the thing, not the thing.
+  const isToday = day.date === today;
+  const timedCandidates = items
+    .filter((i) => i.time && i.type !== 'transport' && i.type !== 'transfer')
+    .sort((a, b) => (toMinutes(a.time) ?? 0) - (toMinutes(b.time) ?? 0));
+  const nowMins = isToday ? nowMinutesInZone(dayTimeZone(bundle.trip, day)) : null;
+  const nextUpItem = isToday
+    ? timedCandidates.find((i) => (toMinutes(i.time) ?? -1) >= (nowMins ?? 0))
+    : timedCandidates[0];
+
+  let nextUpDetails: NextUpDetails | undefined;
+  if (nextUpItem) {
+    const nextUpBooking = bookingOf(bundle, nextUpItem);
+    const nextUpIndex = items.findIndex((i) => i.id === nextUpItem.id);
+    const precedingLeg = nextUpIndex > 0 ? items[nextUpIndex - 1] : undefined;
+    const legMins = precedingLeg?.travel?.durationMins ?? precedingLeg?.durationMins;
+    const travelHint =
+      precedingLeg?.travel && legMins ? `${legMins} min by ${precedingLeg.travel.mode}` : null;
+    const detail = [
+      nextUpBooking ? bookingWord(nextUpBooking.status) : null,
+      nextUpItem.orderNotes?.[0] ?? nextUpItem.notes,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const directionsLink = itemLinks(nextUpItem, day.date, nextUpBooking).find(
+      (l) => l.kind === 'directions' || l.kind === 'map',
+    );
+    nextUpDetails = {
+      item: nextUpItem,
+      label: isToday ? 'Next' : 'First',
+      travelHint,
+      detail,
+      bookingHref: nextUpBooking
+        ? `/t/${bundle.trip.id}/bookings/${nextUpBooking.id}`
+        : `/t/${bundle.trip.id}/items/${nextUpItem.id}`,
+      directionsUrl: directionsLink?.url ?? null,
+    };
+  }
+
+  const nextDayItems = nextDay ? itemsForDay(bundle, nextDay.id) : [];
+  const tomorrowFirstItem = [...nextDayItems]
+    .filter((i) => i.time)
+    .sort((a, b) => (toMinutes(a.time) ?? 0) - (toMinutes(b.time) ?? 0))[0];
+  const tomorrowNoteItem = nextDayItems.find(
+    (i) => i.tags.includes('MUST') || i.type === 'reminder',
+  );
+  const tomorrowNote = tomorrowNoteItem?.notes ?? tomorrowNoteItem?.title ?? null;
+
+  // Items are in plan order. One with no time of its own belongs with the stop before it:
+  // the Colosseum listed after "Hotel to the Colosseum (morning)" is a morning sight, not
+  // an "any time" one. Only items before anything is timed fall under Any time.
   const groups = new Map<TimeGroup, Item[]>();
+  let carried: TimeGroup = 'any';
   for (const item of items) {
-    const group = timeGroupOf(item);
+    const own = timeGroupOf(item);
+    const group: TimeGroup = own === 'any' ? carried : own;
+    carried = group;
     const list = groups.get(group);
     if (list) list.push(item);
     else groups.set(group, [item]);
@@ -485,51 +781,40 @@ export function DayTimelinePage() {
   return (
     <>
       <PageHeader
-        title={formatDayLabel(day.date)}
-        subtitle={
+        kicker={
           <>
-            {day.city}
-            {day.theme ? ` · ${day.theme}` : ''}
+            {formatFullDate(day.date)} · Day {dayIndex} of {totalIndex}
           </>
         }
-        actions={
-          <>
-            <Link
-              to={prevDay ? `/t/${bundle.trip.id}/days/${prevDay.id}` : '#'}
-              aria-label="Previous day"
-              aria-disabled={!prevDay}
-              onClick={(event) => {
-                if (!prevDay) event.preventDefault();
-              }}
-              className={cn(
-                'inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600',
-                !prevDay && 'pointer-events-none opacity-30',
-              )}
-            >
-              <ChevronLeft size={16} aria-hidden />
-            </Link>
-            <Link
-              to={nextDay ? `/t/${bundle.trip.id}/days/${nextDay.id}` : '#'}
-              aria-label="Next day"
-              aria-disabled={!nextDay}
-              onClick={(event) => {
-                if (!nextDay) event.preventDefault();
-              }}
-              className={cn(
-                'inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600',
-                !nextDay && 'pointer-events-none opacity-30',
-              )}
-            >
-              <ChevronRight size={16} aria-hidden />
-            </Link>
-            <Button onClick={() => setEditMode((v) => !v)}>
-              {editMode ? 'Done editing' : 'Edit day'}
-            </Button>
-          </>
-        }
+        title={day.city}
+        subtitle={day.theme}
       />
 
-      <DaySummaryCard bundle={bundle} day={day} prevDay={prevDay} />
+      {checkingOut || moveItem ? (
+        <div className="mb-4 space-y-1 text-sm text-slate-500 dark:text-slate-400">
+          {checkingOut ? <p>Check out by {checkingOut.checkOutTime ?? '10:00'}</p> : null}
+          {moveItem?.travel && prevDay ? (
+            <p className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200">
+              <ArrowRight size={14} className="shrink-0 text-slate-400" aria-hidden />
+              {prevDay.city} → {day.city} by {moveItem.travel.mode} {moveItem.time}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Edit mode is a different screen - the reading aids give way to the full list below. */}
+      {nextUpDetails && !editMode ? <NextUpCard info={nextUpDetails} /> : null}
+
+      {tonight || (tomorrowFirstItem && nextDay) ? (
+        <div className="mb-4 grid grid-cols-2 gap-2.5">
+          {tonight ? <TonightTile accommodation={tonight} day={day} /> : null}
+          {tomorrowFirstItem && nextDay ? (
+            <TomorrowTile firstItem={tomorrowFirstItem} noteLine={tomorrowNote} />
+          ) : null}
+        </div>
+      ) : null}
+
+      <TicketsTodayCard tripId={bundle.trip.id} tickets={tickets} />
 
       {problems.length > 0 ? (
         <Link
@@ -601,7 +886,7 @@ export function DayTimelinePage() {
 
       {items.length === 0 ? (
         <EmptyState title="Nothing matches that filter." />
-      ) : (
+      ) : editMode ? (
         TIME_GROUP_ORDER.map((group) => {
           const groupItems = groups.get(group);
           if (!groupItems || groupItems.length === 0) return null;
@@ -613,13 +898,36 @@ export function DayTimelinePage() {
                     key={item.id}
                     item={item}
                     bundle={bundle}
-                    isNext={item.id === nextItem?.id}
+                    isNext={item.id === nextUpItem?.id}
                     editMode={editMode}
                     onToggle={(status) => void itemsRepo.setStatus(item.id, status)}
                     onMove={(dir) => void itemsRepo.move(day.id, item.id, dir)}
                   />
                 ))}
               </div>
+            </Section>
+          );
+        })
+      ) : (
+        TIME_GROUP_ORDER.map((group) => {
+          const groupItems = groups.get(group);
+          if (!groupItems || groupItems.length === 0) return null;
+          return (
+            <Section key={group} title={TIME_GROUP_LABELS[group]}>
+              <Card>
+                {groupItems.map((item) =>
+                  isLocalConnector(item) ? (
+                    <ConnectorLine key={item.id} item={item} />
+                  ) : (
+                    <CompactRow
+                      key={item.id}
+                      item={item}
+                      bundle={bundle}
+                      isCurrent={item.id === nextUpItem?.id}
+                    />
+                  ),
+                )}
+              </Card>
             </Section>
           );
         })
@@ -648,6 +956,42 @@ export function DayTimelinePage() {
           </Button>
         )
       ) : null}
+
+      <div className="mt-4 flex gap-2.5">
+        <Link
+          to={prevDay ? `/t/${bundle.trip.id}/days/${prevDay.id}` : '#'}
+          aria-label="Previous day"
+          aria-disabled={!prevDay}
+          onClick={(event) => {
+            if (!prevDay) event.preventDefault();
+          }}
+          className={cn(
+            'flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 font-semibold dark:border-slate-600',
+            !prevDay && 'pointer-events-none opacity-30',
+          )}
+        >
+          <ChevronLeft size={16} aria-hidden />
+          {prevDay ? shortNavDate(prevDay.date) : ''}
+        </Link>
+        <Link
+          to={nextDay ? `/t/${bundle.trip.id}/days/${nextDay.id}` : '#'}
+          aria-label="Next day"
+          aria-disabled={!nextDay}
+          onClick={(event) => {
+            if (!nextDay) event.preventDefault();
+          }}
+          className={cn(
+            'flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 font-semibold dark:border-slate-600',
+            !nextDay && 'pointer-events-none opacity-30',
+          )}
+        >
+          {nextDay ? shortNavDate(nextDay.date) : ''}
+          <ChevronRight size={16} aria-hidden />
+        </Link>
+        <Button onClick={() => setEditMode((v) => !v)}>
+          {editMode ? 'Done editing' : 'Edit day'}
+        </Button>
+      </div>
     </>
   );
 }
@@ -880,8 +1224,8 @@ export function ItemDetailPage() {
   return (
     <>
       <PageHeader
+        kicker={day ? `${formatDayLabel(day.date)} · ${day.city}` : undefined}
         title={item.title}
-        subtitle={day ? `${formatDayLabel(day.date)} · ${day.city}` : undefined}
         actions={
           <>
             {!editing ? <Button onClick={() => setEditing(true)}>Edit</Button> : null}
@@ -893,7 +1237,7 @@ export function ItemDetailPage() {
       <div className="mb-3 flex items-center gap-2">
         <CategoryIcon category={itemCategory(item.type)} />
         {item.time ? (
-          <p className="text-sm font-semibold tabular-nums">
+          <p className="text-lg font-semibold tabular-nums">
             {item.timeApprox ? '~' : ''}
             {item.time}
             {item.timeEnd ? `–${item.timeEnd}` : ''}

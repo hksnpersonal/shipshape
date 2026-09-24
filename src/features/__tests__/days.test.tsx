@@ -6,7 +6,7 @@
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { AppShell } from '@/app/AppShell';
 import { db } from '@/db/db';
@@ -48,7 +48,8 @@ describe('the day summary card', () => {
   it("shows tonight's hotel and groups the day by time, with edit controls hidden", async () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
 
-    expect(await screen.findByText(/Tonight:.*Hotel Visconti/)).toBeInTheDocument();
+    const tonightTile = (await screen.findByText('Tonight')).parentElement as HTMLElement;
+    expect(within(tonightTile).getByText(/Hotel Visconti/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Morning' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Afternoon' })).toBeInTheDocument();
 
@@ -68,7 +69,7 @@ describe('the day summary card', () => {
 
   it('lists the booked restaurant under Tickets today', async () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
-    await screen.findByText(/Tonight:/);
+    await screen.findByText('Tonight');
     // Scoped to the Tickets today block: the day's items also mention Roscioli by name
     // ("Lunch at Roscioli..."), so an unscoped query would match both.
     const ticketsHeading = screen.getByText('Tickets today');
@@ -80,8 +81,8 @@ describe('the day summary card', () => {
   it('shows both the checkout and the new check-in on a travel day', async () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d04`);
     expect(await screen.findByText(/Check out by 10:00/)).toBeInTheDocument();
-    expect(screen.getByText(/Tonight:.*Sant'Antonino/)).toBeInTheDocument();
-    expect(screen.getByText(/check-in from 14:00/)).toBeInTheDocument();
+    const tonightTile = screen.getByText('Tonight').parentElement as HTMLElement;
+    expect(within(tonightTile).getByText(/Sant'Antonino/)).toBeInTheDocument();
   });
 
   it('shows the move on a day that changes city', async () => {
@@ -93,13 +94,13 @@ describe('the day summary card', () => {
 describe('plain-word chips on a compact row', () => {
   it('reads "Must do" rather than the raw tag code', async () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
-    await screen.findByText(/Tonight:/);
+    await screen.findByText('Tonight');
     expect((await screen.findAllByText('Must do')).length).toBeGreaterThan(0);
   });
 
   it('reads "Booked" for an item linked to a confirmed booking', async () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
-    await screen.findByText(/Tonight:/);
+    await screen.findByText('Tonight');
     expect(screen.getAllByText('Booked').length).toBeGreaterThan(0);
   });
 });
@@ -107,7 +108,7 @@ describe('plain-word chips on a compact row', () => {
 describe('day navigation', () => {
   it('moves to the next and previous day from the arrows', async () => {
     renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
-    await screen.findByText(/Tonight:/);
+    await screen.findByText('Tonight');
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('link', { name: 'Next day' }));
@@ -116,7 +117,44 @@ describe('day navigation', () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: 'Previous day' }));
-    expect(await screen.findByText(/Tonight:.*Hotel Visconti/)).toBeInTheDocument();
+    const tonightTile = (await screen.findByText('Tonight')).parentElement as HTMLElement;
+    expect(within(tonightTile).getByText(/Hotel Visconti/)).toBeInTheDocument();
+  });
+});
+
+describe('the Next up card', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('picks the next timed item after the mocked clock, not the first of the day', async () => {
+    await settingsRepo.patch({ simulatedToday: '2026-10-11' });
+    // 15:00 in Europe/Rome (the trip's default zone, still CEST on 11 Oct) - after
+    // breakfast at 07:00 and check-in at 14:30, before Notre-Dame at 16:30.
+    vi.setSystemTime(new Date('2026-10-11T13:00:00.000Z'));
+    renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
+
+    const chip = await screen.findByText(/Next · 16:30/);
+    const card = chip.parentElement?.parentElement as HTMLElement;
+    expect(within(card).getByText('Notre-Dame Cathedral')).toBeInTheDocument();
+  });
+});
+
+describe('local hops in the timeline', () => {
+  it('renders a local bus leg as a connector line, not a full row', async () => {
+    renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
+    await screen.findByText('Tonight');
+
+    expect(screen.getByText('Bus 14 min')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Bus to Roscioli/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('the Tonight tile', () => {
+  it('shows "night 2 of 3" for the second night of a three-night stay', async () => {
+    renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
+    const tonightTile = (await screen.findByText('Tonight')).parentElement as HTMLElement;
+    expect(within(tonightTile).getByText(/Night 2 of 3/)).toBeInTheDocument();
   });
 });
 
@@ -130,4 +168,16 @@ describe('the item detail page', () => {
     expect(header).not.toBeNull();
     expect(within(header as HTMLElement).getByText('Transport')).toBeInTheDocument();
   });
+});
+
+describe('grouping a day', () => {
+  it('keeps an untimed sight with the stop before it, not under Any time', async () => {
+    await settingsRepo.patch({ simulatedToday: '2026-09-27' });
+    renderAt(`/t/${TRIP}/days/${TRIP}-d02`);
+    const morning = (await screen.findByRole('heading', { name: 'Morning' })).closest(
+      'section',
+    ) as HTMLElement;
+    expect(within(morning).getByText('Colosseum')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Any time' })).not.toBeInTheDocument();
+  }, 15000);
 });

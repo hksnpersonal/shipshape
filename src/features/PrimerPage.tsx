@@ -71,7 +71,7 @@ export function PrimerPage() {
 
   return (
     <>
-      <PageHeader title="New to Europe?" />
+      <PageHeader kicker="Guide" title="New to Europe?" />
       <SearchInput
         value={query}
         onChange={setQuery}

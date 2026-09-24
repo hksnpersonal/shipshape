@@ -57,7 +57,8 @@ describe('the Today button after the trip', () => {
   it('lands on the last day, not the first', async () => {
     await settingsRepo.patch({ simulatedToday: '2026-10-19' });
     renderAt(`/t/${TRIP}/today`);
-    expect(await screen.findByText('Sat 17 Oct')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Amsterdam' })).toBeInTheDocument();
+    expect(screen.getByText(/17 October/)).toBeInTheDocument();
   });
 });
 

@@ -9,6 +9,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import {
   CalendarDays,
   Check,
+  ChevronLeft,
   Download,
   EyeOff,
   ListChecks,
@@ -25,6 +26,7 @@ import {
   PageHeader,
   Section,
   SeverityChip,
+  StatTile,
 } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { europe2026 } from '@/seed/europe-2026';
@@ -89,6 +91,20 @@ function groupByDay(findings: ResolvedFinding[], bundle: TripBundle): DayGroup[]
   return groups;
 }
 
+/** A way back to the tab a screen was reached from - the mobile nav bar is out of the way
+ * behind the keyboard on a form, and the desktop rail doesn't exist on a phone at all. */
+function BackToMore({ tripId }: { tripId: string }) {
+  return (
+    <Link
+      to={`/t/${tripId}/more`}
+      className="text-brand-700 dark:text-brand-300 mb-1 -ml-2 inline-flex min-h-[44px] items-center gap-0.5 px-2 text-sm font-semibold"
+    >
+      <ChevronLeft size={20} aria-hidden />
+      More
+    </Link>
+  );
+}
+
 export function ConflictInboxPage() {
   const { tripId } = useParams();
   const bundle = useTripBundle(tripId);
@@ -107,6 +123,13 @@ export function ConflictInboxPage() {
   const infoCount = base.filter((f) => f.severity === 'info').length;
   const visible = showMinorNotes ? base : base.filter((f) => f.severity !== 'info');
 
+  // The three stat tiles read the trip's open state, not whichever tab is on screen right
+  // now - they are the fixed overview the cards and disclosures below sit under.
+  const openReview = audit.open.filter((f) => f.key.includes('mc-review-'));
+  const openOther = audit.open.filter((f) => !f.key.includes('mc-review-'));
+  const clashesCount = openOther.filter((f) => f.severity !== 'info').length;
+  const minorNotesCount = openOther.filter((f) => f.severity === 'info').length;
+
   const resolve = (finding: ResolvedFinding, status: 'resolved' | 'dismissed') =>
     void findingsRepo.setState(bundle.trip.id, finding.key, finding.ruleId, status);
   const reopen = (finding: ResolvedFinding) =>
@@ -116,9 +139,10 @@ export function ConflictInboxPage() {
 
   return (
     <>
+      <BackToMore tripId={bundle.trip.id} />
       <PageHeader
         title="Plan check"
-        subtitle="Things in the plan worth a second look. None of them stop the trip."
+        subtitle="Nothing here stops the trip. Decide when you have a minute."
         actions={
           <div
             className="flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600"
@@ -151,6 +175,16 @@ export function ConflictInboxPage() {
         }
       />
 
+      <div className="mb-5 grid grid-cols-3 gap-2">
+        <StatTile value={openReview.length} label="to decide" />
+        <StatTile
+          value={clashesCount}
+          label="clashes"
+          tone={clashesCount > 0 ? 'bad' : 'neutral'}
+        />
+        <StatTile value={minorNotesCount} label="minor notes" />
+      </div>
+
       {infoCount > 0 ? (
         <button
           type="button"
@@ -162,16 +196,13 @@ export function ConflictInboxPage() {
       ) : null}
 
       {toReview.length > 0 ? (
-        <Section title={`To review (${toReview.length})`}>
-          <p className="-mt-1 mb-3 text-sm text-slate-500 dark:text-slate-400">
-            Where your notes and your tickets disagree. The day plans show the ticket times.
-          </p>
+        <Section title={`To decide (${toReview.length})`}>
           <div className="space-y-3">
             {toReview.map((finding) => (
-              <FindingRow
+              <ReviewCard
                 key={finding.key}
                 finding={finding}
-                tripId={bundle.trip.id}
+                bundle={bundle}
                 onResolve={resolve}
                 onReopen={reopen}
               />
@@ -209,6 +240,65 @@ export function ConflictInboxPage() {
         </div>
       )}
     </>
+  );
+}
+
+/** One place the notes and the tickets disagree: the day it happens on, the finding in
+ * full, and a decision in one tap either way. Unlike `FindingRow` below, nothing here is
+ * folded - this is the section the page exists to be read for. */
+function ReviewCard({
+  finding,
+  bundle,
+  onResolve,
+  onReopen,
+}: {
+  finding: ResolvedFinding;
+  bundle: TripBundle;
+  onResolve: (finding: ResolvedFinding, status: 'resolved' | 'dismissed') => void;
+  onReopen: (finding: ResolvedFinding) => void;
+}) {
+  const day = finding.dayId ? bundle.days.find((d) => d.id === finding.dayId) : undefined;
+  const dayLine = day
+    ? `${formatDayLabel(day.date)} · ${day.city}`
+    : finding.date
+      ? formatDayLabel(finding.date)
+      : null;
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-2">
+        {dayLine ? (
+          <p className="text-brand-600 dark:text-brand-300 text-xs font-bold tracking-[0.06em] uppercase">
+            {dayLine}
+          </p>
+        ) : (
+          <span />
+        )}
+        {finding.status !== 'open' ? <Chip tone="good">{finding.status}</Chip> : null}
+      </div>
+      <p className="mt-1 text-base leading-snug font-bold">{finding.title}</p>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{finding.detail}</p>
+      <div className="mt-3 flex gap-2">
+        {finding.status === 'open' ? (
+          <>
+            <Button
+              variant="primary"
+              className="flex-1"
+              onClick={() => onResolve(finding, 'resolved')}
+            >
+              Sorted
+            </Button>
+            <Button className="flex-1" onClick={() => onResolve(finding, 'dismissed')}>
+              Ignore
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => onReopen(finding)}>
+            <RotateCcw size={15} aria-hidden /> Reopen
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -330,6 +420,7 @@ export function RemindersPage() {
 
   return (
     <>
+      <BackToMore tripId={bundle.trip.id} />
       <PageHeader title="Reminders" />
       <Section title={`Coming up (${upcoming.length})`}>
         <div className="space-y-2">
@@ -372,6 +463,7 @@ export function RemindersPage() {
 }
 
 export function SettingsPage() {
+  const { tripId } = useParams();
   const settings = useSettings();
   const navigate = useNavigate();
   const [message, setMessage] = useState<string | null>(null);
@@ -455,6 +547,7 @@ export function SettingsPage() {
 
   return (
     <>
+      {tripId ? <BackToMore tripId={tripId} /> : null}
       <PageHeader title="Settings" subtitle="Everything lives on this device." />
 
       <Section title="Load your trip file">

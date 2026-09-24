@@ -1,7 +1,8 @@
 /**
- * The redesigned trip home: a first-time traveller's overview rather than an auditor's
- * dashboard. Covers the route summary, the next-up card's "tonight" line, the welcome
- * card's dismissal, and the nav swap that dropped Inbox for Documents.
+ * The redesigned trip home: the whole route, grouped by country, with the welcome card,
+ * the missing-documents nudge and the guide link kept compact below it. Covers the route
+ * grouping and connectors, the "You are here" marker, the welcome card's dismissal, and
+ * the one-trip redirect from "/".
  */
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -12,7 +13,7 @@ import { db } from '@/db/db';
 import { importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
 import { settingsRepo } from '@/db/repo';
-import { TripHomePage } from '@/features/TripPages';
+import { TripHomePage, TripsListPage } from '@/features/TripPages';
 
 const TRIP = europe2026.bundle.trip.id;
 
@@ -37,14 +38,25 @@ beforeEach(async () => {
   localStorage.clear();
 });
 
-describe('the trip route', () => {
+describe('the route', () => {
   beforeEach(async () => {
     await settingsRepo.patch({ simulatedToday: '2026-09-04' });
   });
 
-  it('lists one stop per hotel, in order, each with its nights', async () => {
+  it('groups stops under one country heading each, in the order the trip visits them', async () => {
     renderHome();
-    const route = (await screen.findByText('Your route')).closest('section') as HTMLElement;
+    const headings = await screen.findAllByRole('heading', { level: 2 });
+    const countries = headings
+      .map((h) => h.textContent)
+      .filter((text): text is string =>
+        ['Italy', 'Switzerland', 'France', 'Netherlands'].includes(text ?? ''),
+      );
+    expect(countries).toEqual(['Italy', 'Switzerland', 'France', 'Netherlands']);
+  });
+
+  it('lists one stop per hotel, in order, each with its dates and nights', async () => {
+    renderHome();
+    await screen.findByText('Italy');
 
     const stops = [
       'Rome',
@@ -57,48 +69,55 @@ describe('the trip route', () => {
       'Amsterdam',
     ];
     for (const city of stops) {
-      expect(within(route).getByText(city)).toBeInTheDocument();
+      expect(screen.getByText(city)).toBeInTheDocument();
     }
 
-    // Presence is not enough - the whole point of the section is the order.
-    const text = route.textContent ?? '';
+    // Presence is not enough - the whole point of the route is the order.
+    const main = screen.getByText('Italy').closest('main') ?? document.body;
+    const text = main.textContent ?? '';
     const positions = stops.map((city) => text.indexOf(city));
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
 
-    // A couple of stops checked in full: dates, nights and the hotel actually booked.
+    expect(screen.getByText('26–29 Sep · 3 nights')).toBeInTheDocument();
+    expect(screen.getByText('Hotel Visconti Suites by FNA Hospitality')).toBeInTheDocument();
     expect(
-      within(route).getByText(/26–29 Sep · 3 nights · Hotel Visconti Suites/),
+      screen.getByText(/Hotel Central Station Apartment · day trip to Varenna/),
     ).toBeInTheDocument();
-    expect(
-      within(route).getByText(/7–11 Oct · 4 nights · Hotel Central Wolter/),
-    ).toBeInTheDocument();
-
-    // The connecting flight into the trip and the Rome-Florence train both show as legs.
-    expect(within(route).getByText(/Flight · Turkish Airlines/)).toBeInTheDocument();
-    expect(within(route).getByText(/Train · Frecciarossa/)).toBeInTheDocument();
   });
 
   it('does not turn a day trip into a stop of its own', async () => {
     renderHome();
-    const route = (await screen.findByText('Your route')).closest('section') as HTMLElement;
+    await screen.findByText('Italy');
 
-    // Varenna, Brussels and Kandersteg are days out from a hotel that doesn't change.
-    expect(within(route).queryByText('Varenna')).not.toBeInTheDocument();
-    expect(within(route).queryByText('Brussels')).not.toBeInTheDocument();
-    expect(within(route).queryByText('Kandersteg')).not.toBeInTheDocument();
+    // Varenna and Brussels are days out from a hotel that doesn't change.
+    expect(screen.queryByText('Varenna')).not.toBeInTheDocument();
+    expect(screen.queryByText('Brussels')).not.toBeInTheDocument();
+  });
+
+  it('shows the leg between two stops', async () => {
+    renderHome();
+    expect(await screen.findByText(/Frecciarossa 08:35/)).toBeInTheDocument();
+  });
+
+  it('shows the flight in at the start of the route and the flight home at the end', async () => {
+    renderHome();
+    expect(await screen.findByText('Fly in · lands 14:10')).toBeInTheDocument();
+    expect(
+      screen.getByText('Thai Airways 14:15 Sat 17 · lands Sydney 21:30 Sun 18'),
+    ).toBeInTheDocument();
   });
 });
 
-describe('the next-up card', () => {
-  it("names tonight's hotel", async () => {
-    // The first night on the ground, in Rome.
-    await settingsRepo.patch({ simulatedToday: '2026-09-26' });
+describe('"You are here"', () => {
+  it('marks the stop covering today, and no other', async () => {
+    await settingsRepo.patch({ simulatedToday: '2026-09-27' });
     renderHome();
 
-    expect(await screen.findByText('Today')).toBeInTheDocument();
-    expect(
-      screen.getByText('Tonight: Hotel Visconti Suites by FNA Hospitality'),
-    ).toBeInTheDocument();
+    const rome = await screen.findByRole('link', { name: /Rome/ });
+    expect(within(rome).getByText('You are here')).toBeInTheDocument();
+
+    const florence = screen.getByRole('link', { name: /Florence/ });
+    expect(within(florence).queryByText('You are here')).not.toBeInTheDocument();
   });
 });
 
@@ -109,6 +128,7 @@ describe('the welcome card', () => {
     renderHome();
 
     expect(await screen.findByText('How this app works')).toBeInTheDocument();
+    expect(screen.getByText('Trip is the whole route.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByText('How this app works')).not.toBeInTheDocument();
 
@@ -121,7 +141,7 @@ describe('the welcome card', () => {
     await settingsRepo.patch({ simulatedToday: '2026-09-04' });
     renderHome();
 
-    await screen.findByText('Your route');
+    await screen.findByText('Italy');
     expect(screen.queryByText('How this app works')).not.toBeInTheDocument();
   });
 
@@ -140,15 +160,18 @@ describe('the welcome card', () => {
   });
 });
 
-describe('the trip nav', () => {
-  it('offers Documents and has dropped Inbox', async () => {
-    await settingsRepo.patch({ simulatedToday: '2026-09-04' });
-    renderHome();
+describe('the trips list', () => {
+  it('redirects straight to the trip when there is exactly one', async () => {
+    const router = createMemoryRouter(
+      [
+        { path: '/', element: <TripsListPage /> },
+        { path: '/t/:tripId', element: <TripHomePage /> },
+      ],
+      { initialEntries: ['/'] },
+    );
+    render(<RouterProvider router={router} />);
 
-    const documentLinks = await screen.findAllByText('Documents');
-    expect(
-      documentLinks.some((el) => el.closest('a')?.getAttribute('href') === `/t/${TRIP}/documents`),
-    ).toBe(true);
-    expect(screen.queryByText('Inbox')).not.toBeInTheDocument();
+    expect(await screen.findByText('Europe 2026')).toBeInTheDocument();
+    expect(screen.getByText('Italy')).toBeInTheDocument();
   });
 });

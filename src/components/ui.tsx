@@ -22,7 +22,7 @@ export function Card({
   onClick?: () => void;
 }) {
   const base =
-    'rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800';
+    'rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800';
   if (!onClick) return <div className={cn(base, className)}>{children}</div>;
   return (
     <button type="button" onClick={onClick} className={cn(base, 'w-full text-left', className)}>
@@ -44,7 +44,7 @@ export function LinkCard({
     <Link
       to={to}
       className={cn(
-        'hover:border-brand-400 block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800',
+        'hover:border-brand-300 block rounded-2xl border border-slate-200 bg-white p-4 transition dark:border-slate-700 dark:bg-slate-800',
         className,
       )}
     >
@@ -151,7 +151,9 @@ export function Button({
   className?: string;
 }) {
   const variants = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700',
+    // Ink, not the accent: the accent marks what is happening now, and a page of terracotta
+    // buttons would drown it.
+    primary: 'bg-slate-900 text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900',
     secondary:
       'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700',
     ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700',
@@ -163,7 +165,7 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium transition disabled:opacity-40',
+        'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-semibold transition disabled:opacity-40',
         variants[variant],
         className,
       )}
@@ -177,15 +179,25 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  kicker,
 }: {
   title: string;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  /** A small accent line above the title, e.g. the date on a day screen. */
+  kicker?: ReactNode;
 }) {
   return (
-    <header className="mb-4 flex items-start justify-between gap-3">
+    <header className="mb-5 flex items-start justify-between gap-3">
       <div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">{title}</h1>
+        {kicker ? (
+          <p className="text-brand-600 dark:text-brand-300 mb-1 text-[13px] font-semibold">
+            {kicker}
+          </p>
+        ) : null}
+        <h1 className="font-display text-[32px] leading-[1.1] font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+          {title}
+        </h1>
         {subtitle ? (
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
         ) : null}
@@ -197,7 +209,7 @@ export function PageHeader({
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-600">
+    <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-600">
       <p className="font-medium text-slate-700 dark:text-slate-200">{title}</p>
       {children ? (
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{children}</p>
@@ -209,7 +221,7 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mb-6">
-      <h2 className="mb-2 text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+      <h2 className="mb-2.5 text-xs font-bold tracking-[0.08em] text-slate-500 uppercase dark:text-slate-400">
         {title}
       </h2>
       {children}
@@ -224,7 +236,7 @@ export function OutLink({ href, children }: { href: string; children: ReactNode 
       href={href}
       target="_blank"
       rel="noreferrer noopener"
-      className="text-brand-700 hover:bg-brand-50 dark:text-brand-200 inline-flex min-h-[36px] items-center rounded-lg border border-slate-300 px-3 text-sm font-medium dark:border-slate-600 dark:hover:bg-slate-700"
+      className="text-brand-700 hover:bg-brand-50 dark:text-brand-200 inline-flex min-h-[44px] items-center rounded-xl border border-slate-300 px-4 text-sm font-semibold dark:border-slate-600 dark:hover:bg-slate-700"
     >
       {children}
     </a>

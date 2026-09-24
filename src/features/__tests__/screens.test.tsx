@@ -10,7 +10,7 @@ import { AppShell } from '@/app/AppShell';
 import { db } from '@/db/db';
 import { importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
-import { bookingsRepo, documentsRepo, settingsRepo, tripsRepo } from '@/db/repo';
+import { bookingsRepo, documentsRepo, settingsRepo } from '@/db/repo';
 import { BookingDetailPage, BookingsBoardPage } from '@/features/BookingPages';
 import { DayTimelinePage, ItemDetailPage } from '@/features/DayPages';
 import { DocumentsVaultPage, OBJECT_URL_TTL_MS } from '@/features/DocumentPages';
@@ -96,7 +96,7 @@ describe('the day timeline', () => {
 describe('the conflict inbox', () => {
   it('leads with every place the notes and the tickets disagree, unfolded', async () => {
     renderAt(`/t/${TRIP}/conflicts`);
-    const heading = await screen.findByText(/^To review \(\d+\)$/);
+    const heading = await screen.findByText(/^To decide \(\d+\)$/);
     const section = heading.closest('section') as HTMLElement;
     const flags = europe2026.bundle.conflicts.filter((c) => c.id.startsWith('mc-review-'));
     expect(flags.length).toBeGreaterThan(0);
@@ -105,12 +105,44 @@ describe('the conflict inbox', () => {
     }
   }, 15000);
 
+  it('shows each open thing to decide as its own card, sorted or ignored in one tap', async () => {
+    const user = userEvent.setup();
+    renderAt(`/t/${TRIP}/conflicts`);
+    const heading = await screen.findByText(/^To decide \(\d+\)$/);
+    const section = heading.closest('section') as HTMLElement;
+    const flags = europe2026.bundle.conflicts.filter((c) => c.id.startsWith('mc-review-'));
+    expect(within(section).getAllByRole('button', { name: 'Sorted' })).toHaveLength(flags.length);
+
+    await user.click(within(section).getAllByRole('button', { name: 'Sorted' })[0] as HTMLElement);
+    await waitFor(() => {
+      expect(within(section).getAllByRole('button', { name: 'Sorted' })).toHaveLength(
+        flags.length - 1,
+      );
+    });
+
+    await user.click(within(section).getAllByRole('button', { name: 'Ignore' })[0] as HTMLElement);
+    await waitFor(() => {
+      expect(within(section).getAllByRole('button', { name: 'Sorted' })).toHaveLength(
+        flags.length - 2,
+      );
+    });
+
+    const states = await db.findingStates.toArray();
+    expect(states.some((s) => s.status === 'resolved')).toBe(true);
+    expect(states.some((s) => s.status === 'dismissed')).toBe(true);
+  }, 15000);
+
   it('renames itself Plan check and groups findings by day, minor notes hidden', async () => {
     renderAt(`/t/${TRIP}/conflicts`);
     expect(await screen.findByRole('heading', { name: 'Plan check' })).toBeInTheDocument();
-    expect(screen.getByText(/None of them stop the trip/)).toBeInTheDocument();
-    // Paris day 16 has an error on it, so its group is named for the day and open by default.
-    expect(await screen.findByText('Sun 11 Oct · Paris')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing here stops the trip/)).toBeInTheDocument();
+    // Paris day 16 has an error on it, so its group is named for the day and open by
+    // default. The same day's own "to decide" card carries the same day line, so this
+    // looks for the one that sits inside a disclosure rather than assuming there is one.
+    const dayLabels = await screen.findAllByText('Sun 11 Oct · Paris');
+    const disclosureLabel = dayLabels.find((el) => el.closest('details'));
+    expect(disclosureLabel).toBeDefined();
+    expect((disclosureLabel?.closest('details') as HTMLDetailsElement).open).toBe(true);
     // Info-severity findings start hidden behind the toggle.
     expect(screen.getByRole('button', { name: /Show minor notes/ })).toBeInTheDocument();
   });
@@ -128,7 +160,7 @@ describe('the conflict inbox', () => {
     const heading = await screen.findByText(
       /TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/,
     );
-    const card = heading.closest('div.rounded-xl') as HTMLElement;
+    const card = heading.closest('div.rounded-2xl') as HTMLElement;
     // Compact by default: expand the finding to reach its actions.
     await user.click(heading);
     await user.click(within(card).getByRole('button', { name: /Sorted/ }));
@@ -152,27 +184,18 @@ describe('the conflict inbox', () => {
 });
 
 describe('nothing is a dead end', () => {
-  it('offers a way into the reminders and the playbook from the trip home', async () => {
-    // Both screens exist and are routed. Without a link they may as well not.
-    renderAt(`/t/${TRIP}`);
-    const reminders = await screen.findByText('Reminders');
-    expect(reminders.closest('a')).toHaveAttribute('href', `/t/${TRIP}/reminders`);
-    expect(screen.getByText('Playbook').closest('a')).toHaveAttribute('href', '/playbook');
-  });
+  // Reminders, the playbook, the documents vault and trip essentials all moved off the
+  // Trip tab to More/Wallet in the Direction A redesign - covered where they now live,
+  // not here.
 
   it('offers a way to jump to today from the day list', async () => {
     renderAt(`/t/${TRIP}/days`);
-    const jump = await screen.findByText('Today');
+    // Scoped to the page header: the app shell's own nav also has a "Today" tab, rendered
+    // twice (desktop rail and mobile bar), which a bare text query would also match.
+    const heading = await screen.findByRole('heading', { name: 'Days' });
+    const header = heading.closest('header') as HTMLElement;
+    const jump = within(header).getByText('Today');
     expect(jump.closest('a')).toHaveAttribute('href', `/t/${TRIP}/today`);
-  });
-
-  it('offers a way into the documents vault from the trip home', async () => {
-    // "Documents" now also names a nav tab (rendered twice, desktop and mobile) and a
-    // welcome-card line, so several elements carry the word - any one linking there is enough.
-    renderAt(`/t/${TRIP}`);
-    const vaults = await screen.findAllByText('Documents');
-    const links = vaults.map((el) => el.closest('a'));
-    expect(links.some((a) => a?.getAttribute('href') === `/t/${TRIP}/documents`)).toBe(true);
   });
 });
 
@@ -274,7 +297,7 @@ describe('filing a document from a booking', () => {
 
   it('associates the attachment with the booking, and the vault shows that association', async () => {
     const bookingScreen = renderAt(`/t/${TRIP}/bookings/bk-rail-bsl-par`);
-    await screen.findByText('TGV Lyria, Basel to Paris');
+    await screen.findByRole('heading', { name: 'Basel → Paris' });
 
     const user = userEvent.setup();
     const file = new File(['x'], 'tgv-ticket.pdf', { type: 'application/pdf' });
@@ -567,9 +590,9 @@ describe('deleting an item', () => {
 });
 
 describe('adding a booking', () => {
-  it('adds a booking that appears under Still to book, and persists with the right ids', async () => {
+  it('adds a booking that shows up once the still-to-book filter is followed, and persists with the right ids', async () => {
     renderAt(`/t/${TRIP}/bookings`);
-    await screen.findByRole('heading', { name: 'Bookings' });
+    await screen.findByRole('heading', { name: 'Wallet' });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'New' }));
@@ -577,11 +600,11 @@ describe('adding a booking', () => {
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-10' } });
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
-    await screen.findAllByText('Ferry to Bellagio');
-    // The board groups by date, not status, so "still needs booking" is a callout at the
-    // top rather than a section of its own.
-    const callout = screen.getByText(/Still to book \(\d+\)/).closest('div') as HTMLElement;
-    expect(within(callout).getByText('Ferry to Bellagio')).toBeInTheDocument();
+    // The board groups by date, not status, so "still needs booking" is a single strip
+    // rather than a section of its own - the new booking shows up once that strip's own
+    // filter is followed.
+    await user.click(screen.getByText(/still to book/));
+    expect(await screen.findByText('Ferry to Bellagio')).toBeInTheDocument();
 
     const stored = (await db.bookings.toArray()).find((b) => b.title === 'Ferry to Bellagio');
     expect(stored?.tripId).toBe(TRIP);
@@ -590,7 +613,7 @@ describe('adding a booking', () => {
 
   it('defaults a new booking to to_book, not booked', async () => {
     renderAt(`/t/${TRIP}/bookings`);
-    await screen.findByRole('heading', { name: 'Bookings' });
+    await screen.findByRole('heading', { name: 'Wallet' });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'New' }));
@@ -598,14 +621,15 @@ describe('adding a booking', () => {
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
     await user.click(screen.getByRole('button', { name: 'Add' }));
 
-    await screen.findAllByText('Airport transfer');
-    const stored = (await db.bookings.toArray()).find((b) => b.title === 'Airport transfer');
-    expect(stored?.status).toBe('to_book');
+    await waitFor(async () => {
+      const stored = (await db.bookings.toArray()).find((b) => b.title === 'Airport transfer');
+      expect(stored?.status).toBe('to_book');
+    });
   });
 
   it('refuses a blank title and a missing date', async () => {
     renderAt(`/t/${TRIP}/bookings`);
-    await screen.findByRole('heading', { name: 'Bookings' });
+    await screen.findByRole('heading', { name: 'Wallet' });
     const before = await db.bookings.count();
 
     const user = userEvent.setup();
@@ -622,7 +646,7 @@ describe('adding a booking', () => {
 
   it('shows a matching guide as the title is typed, linking to the playbook', async () => {
     renderAt(`/t/${TRIP}/bookings`);
-    await screen.findByRole('heading', { name: 'Bookings' });
+    await screen.findByRole('heading', { name: 'Wallet' });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'New' }));
@@ -689,8 +713,7 @@ describe('linking a booking to an item', () => {
     // item detail screen the link was made on.
     renderAt(`/t/${TRIP}/days/${TRIP}-d01`);
     const link = await screen.findByRole('link', { name: /Leonardo Express to Roma Termini/ });
-    const row = link.closest('div.rounded-xl') as HTMLElement;
-    expect(within(row).getByText('Booked')).toBeInTheDocument();
+    expect(within(link).getByText('Booked')).toBeInTheDocument();
   });
 
   it('leaves the booking itself untouched when unlinked', async () => {
@@ -714,9 +737,9 @@ describe('linking a booking to an item', () => {
 describe('editing a booking', () => {
   const BOOKING_ID = 'bk-rail-bsl-par'; // "TGV Lyria, Basel to Paris"
 
-  it('edits a title, date and reference, and shows them on the detail screen', async () => {
+  it('edits a title, date and reference, and persists them - the route heading is unaffected', async () => {
     renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
-    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+    await screen.findByRole('heading', { name: 'Basel → Paris' });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Edit' }));
@@ -727,9 +750,11 @@ describe('editing a booking', () => {
     await user.type(screen.getByLabelText('Reference'), 'PNR-84421');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(
-      await screen.findByRole('heading', { name: 'TGV Lyria to Paris, rebooked' }),
-    ).toBeInTheDocument();
+    // The heading is the route, derived from the booking's from/to - not the title - so
+    // it survives a title edit unchanged; the new date shows up in the subtitle instead.
+    expect(await screen.findByRole('heading', { name: 'Basel → Paris' })).toBeInTheDocument();
+    expect(await screen.findByText(/Mon 12 Oct/)).toBeInTheDocument();
+
     const stored = await db.bookings.get(BOOKING_ID);
     expect(stored?.title).toBe('TGV Lyria to Paris, rebooked');
     expect(stored?.date).toBe('2026-10-12');
@@ -739,7 +764,7 @@ describe('editing a booking', () => {
   it('leaves the booking untouched when the edit is cancelled', async () => {
     const before = await db.bookings.get(BOOKING_ID);
     renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
-    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+    await screen.findByRole('heading', { name: 'Basel → Paris' });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Edit' }));
@@ -748,7 +773,7 @@ describe('editing a booking', () => {
     await user.type(titleInput, 'Something else entirely');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.getByRole('heading', { name: 'TGV Lyria, Basel to Paris' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Basel → Paris' })).toBeInTheDocument();
     expect(await db.bookings.get(BOOKING_ID)).toEqual(before);
   });
 });
@@ -762,28 +787,15 @@ describe('passengers on a booking', () => {
     });
 
     renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
-    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+    await screen.findByRole('heading', { name: 'Basel → Paris' });
 
     expect(screen.getByText('Alex Henson')).toBeInTheDocument();
     expect(screen.getByText('Coach 5 · Seat 74')).toBeInTheDocument();
   });
 });
 
-describe('trip essentials', () => {
-  it('renders a tel: link for a phone essential on the trip home', async () => {
-    await tripsRepo.patch(TRIP, {
-      essentials: [
-        { id: 'ess-1', label: 'Travel insurer', value: '+61 2 5550 1234', kind: 'phone' },
-      ],
-    });
-
-    renderAt(`/t/${TRIP}`);
-    await screen.findByText('Travel insurer');
-
-    const call = screen.getByRole('link', { name: 'Call' });
-    expect(call).toHaveAttribute('href', 'tel:+61255501234');
-  });
-});
+// Trip essentials moved off the Trip tab in the Direction A redesign - covered wherever
+// the More screen that owns them now tests it, not here.
 
 describe('deleting a booking', () => {
   const BOOKING_ID = 'bk-rail-bsl-par'; // "TGV Lyria, Basel to Paris"
@@ -797,7 +809,7 @@ describe('deleting a booking', () => {
     expect((await db.items.get(itemId))?.bookingId).toBe(BOOKING_ID);
 
     renderAt(`/t/${TRIP}/bookings/${BOOKING_ID}`);
-    await screen.findByRole('heading', { name: 'TGV Lyria, Basel to Paris' });
+    await screen.findByRole('heading', { name: 'Basel → Paris' });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Edit' }));
@@ -807,7 +819,7 @@ describe('deleting a booking', () => {
       expect(await db.bookings.get(BOOKING_ID)).toBeUndefined();
     });
     // The delete navigates within the same router - no fresh mount needed to see it.
-    expect(await screen.findByRole('heading', { name: 'Bookings' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Wallet' })).toBeInTheDocument();
 
     const item = await db.items.get(itemId);
     expect(item).toBeDefined();

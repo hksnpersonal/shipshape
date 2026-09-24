@@ -444,15 +444,16 @@ function CategoryTile({
   );
 }
 
-/** One guide as a card: the shape and colour say what it is before anyone reads the title. */
-function GuideIndexCard({ guide }: { guide: Guide }) {
+/** One guide as a card: the shape and colour say what it is before anyone reads the title.
+ * `tripId` keeps the link inside the trip's own tab bar when there is one to stay in. */
+function GuideIndexCard({ guide, tripId }: { guide: Guide; tripId?: string }) {
   const bucket = CATEGORY_BUCKET[guide.category];
   const Icon = BUCKET_ICON[bucket];
   const sentence = leadTimeSentence(guide.bookAdvice);
 
   return (
     <Link
-      to={`/playbook/${guide.id}`}
+      to={tripId ? `/t/${tripId}/playbook/${guide.id}` : `/playbook/${guide.id}`}
       className="hover:border-brand-400 block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow dark:border-slate-700 dark:bg-slate-800"
     >
       <div className="flex items-start gap-3">
@@ -487,6 +488,7 @@ function GuideIndexCard({ guide }: { guide: Guide }) {
 }
 
 export function PlaybookIndexPage() {
+  const { tripId } = useParams();
   const [query, setQuery] = useState('');
   const [activeBuckets, setActiveBuckets] = useState<ReadonlySet<GuideBucket>>(new Set());
 
@@ -585,7 +587,7 @@ export function PlaybookIndexPage() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {guides.map((guide) => (
-                  <GuideIndexCard key={guide.id} guide={guide} />
+                  <GuideIndexCard key={guide.id} guide={guide} tripId={tripId} />
                 ))}
               </div>
             </div>

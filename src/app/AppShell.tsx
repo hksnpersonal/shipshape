@@ -1,109 +1,125 @@
 /**
- * The frame every screen sits in: a header that says where you are, and navigation that
- * is a bottom bar on a phone and a side rail on a laptop.
+ * The frame every screen sits in: four tabs that answer the four questions a traveller has.
+ * Today (what now), Trip (where am I in it), Wallet (where is my ticket), More (everything
+ * else). A bottom bar on a phone, a side rail on a laptop.
  */
-import { NavLink, Outlet, useParams } from 'react-router';
-import {
-  CalendarDays,
-  FolderOpen,
-  Home,
-  Map,
-  MoreHorizontal,
-  Settings,
-  Ticket,
-} from 'lucide-react';
+import { Link, Outlet, useLocation, useParams } from 'react-router';
+import { Map, MoreHorizontal, Settings, Sun, Ticket, Wallet } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof Map;
-  badge?: number;
+  /** Whether this tab owns the current screen, including screens reached from inside it. */
+  owns: (path: string) => boolean;
 }
 
 function navItems(tripId: string | undefined): NavItem[] {
   if (!tripId) {
     return [
-      { to: '/', label: 'Trips', icon: Map },
-      { to: '/playbook', label: 'Playbook', icon: Ticket },
-      { to: '/settings', label: 'Settings', icon: Settings },
+      { to: '/', label: 'Trips', icon: Map, owns: (p) => p === '/' },
+      { to: '/playbook', label: 'Playbook', icon: Ticket, owns: (p) => p.startsWith('/playbook') },
+      { to: '/settings', label: 'Settings', icon: Settings, owns: (p) => p === '/settings' },
     ];
   }
+  const base = `/t/${tripId}`;
   return [
-    { to: `/t/${tripId}`, label: 'Home', icon: Home },
-    { to: `/t/${tripId}/days`, label: 'Days', icon: CalendarDays },
-    { to: `/t/${tripId}/bookings`, label: 'Bookings', icon: Ticket },
-    { to: `/t/${tripId}/documents`, label: 'Documents', icon: FolderOpen },
-    { to: '/settings', label: 'More', icon: MoreHorizontal },
+    {
+      to: `${base}/today`,
+      label: 'Today',
+      icon: Sun,
+      owns: (p) => /\/(today|days\/[^/]+|items\/[^/]+)$/.test(p),
+    },
+    {
+      to: base,
+      label: 'Trip',
+      icon: Map,
+      owns: (p) => p === base || p === `${base}/days` || p === `${base}/guide`,
+    },
+    {
+      to: `${base}/bookings`,
+      label: 'Wallet',
+      icon: Wallet,
+      owns: (p) => p.startsWith(`${base}/bookings`),
+    },
+    {
+      to: `${base}/more`,
+      label: 'More',
+      icon: MoreHorizontal,
+      owns: (p) =>
+        ['/more', '/conflicts', '/documents', '/reminders', '/settings', '/playbook'].some((s) =>
+          p.startsWith(`${base}${s}`),
+        ),
+    },
   ];
 }
 
 export function AppShell() {
   const { tripId } = useParams();
+  const { pathname } = useLocation();
   const items = navItems(tripId);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 md:flex dark:bg-slate-900 dark:text-slate-100">
-      <nav className="hidden w-56 shrink-0 border-r border-slate-200 p-4 md:block dark:border-slate-700">
-        <p className="mb-6 px-2 text-lg font-bold">Shipshape</p>
+      <nav
+        aria-label="Main"
+        className="hidden w-56 shrink-0 border-r border-slate-200 p-4 md:block dark:border-slate-700"
+      >
+        <p className="font-display mb-6 px-2 text-xl font-semibold">Shipshape</p>
         <ul className="space-y-1">
-          {items.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.to === `/t/${tripId}` || item.to === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium',
-                    isActive
+          {items.map((item) => {
+            const active = item.owns(pathname);
+            return (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex min-h-[44px] items-center gap-3 rounded-xl px-3 text-sm font-semibold',
+                    active
                       ? 'bg-brand-100 text-brand-800 dark:bg-brand-900/50 dark:text-brand-100'
                       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                  )
-                }
-              >
-                <item.icon size={18} aria-hidden />
-                {item.label}
-                {item.badge ? (
-                  <span className="ml-auto rounded-full bg-rose-600 px-1.5 text-xs font-semibold text-white">
-                    {item.badge}
-                  </span>
-                ) : null}
-              </NavLink>
-            </li>
-          ))}
+                  )}
+                >
+                  <item.icon size={18} aria-hidden />
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-4 pb-24 md:pb-8">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-5 pt-6 pb-28 md:pb-10">
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden dark:border-slate-700 dark:bg-slate-800/95">
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden dark:border-slate-700 dark:bg-slate-800"
+      >
         <ul className="flex">
-          {items.map((item) => (
-            <li key={item.to} className="flex-1">
-              <NavLink
-                to={item.to}
-                end={item.to === `/t/${tripId}` || item.to === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'relative flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium',
-                    isActive
-                      ? 'text-brand-700 dark:text-brand-300'
-                      : 'text-slate-500 dark:text-slate-400',
-                  )
-                }
-              >
-                <item.icon size={20} aria-hidden />
-                {item.label}
-                {item.badge ? (
-                  <span className="absolute top-1 right-1/4 rounded-full bg-rose-600 px-1 text-[10px] font-semibold text-white">
-                    {item.badge}
-                  </span>
-                ) : null}
-              </NavLink>
-            </li>
-          ))}
+          {items.map((item) => {
+            const active = item.owns(pathname);
+            return (
+              <li key={item.to} className="flex-1">
+                <Link
+                  to={item.to}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px]',
+                    active
+                      ? 'text-brand-600 dark:text-brand-300 font-bold'
+                      : 'font-medium text-slate-500 dark:text-slate-400',
+                  )}
+                >
+                  <item.icon size={22} aria-hidden />
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
     </div>

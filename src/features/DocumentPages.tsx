@@ -3,8 +3,8 @@
  * bytes on this device rather than as a pile of emails to search through at a barrier.
  */
 import { useRef, useState } from 'react';
-import { useParams } from 'react-router';
-import { FileText, Trash2, Upload } from 'lucide-react';
+import { Link, useParams } from 'react-router';
+import { ChevronLeft, FileText, Trash2, Upload } from 'lucide-react';
 import {
   Button,
   Card,
@@ -263,6 +263,20 @@ export function AttachDocumentButton({
   );
 }
 
+/** A way back to the tab this screen was reached from - the vault is only ever opened from
+ * the trip, so this is unconditional once the trip itself has loaded. */
+function BackToMore({ tripId }: { tripId: string }) {
+  return (
+    <Link
+      to={`/t/${tripId}/more`}
+      className="text-brand-700 dark:text-brand-300 mb-1 -ml-2 inline-flex min-h-[44px] items-center gap-0.5 px-2 text-sm font-semibold"
+    >
+      <ChevronLeft size={20} aria-hidden />
+      More
+    </Link>
+  );
+}
+
 export function DocumentsVaultPage() {
   const { tripId } = useParams();
   const bundle = useTripBundle(tripId);
@@ -297,6 +311,7 @@ export function DocumentsVaultPage() {
 
   return (
     <>
+      <BackToMore tripId={bundle.trip.id} />
       <PageHeader
         title="Documents"
         subtitle="Tickets and confirmations you have already bought, kept on this device."

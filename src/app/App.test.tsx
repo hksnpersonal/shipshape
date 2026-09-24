@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from '@/app/App';
 import { db } from '@/db/db';
@@ -10,20 +9,20 @@ describe('the app on a fresh device', () => {
     await db.open();
   });
 
-  it('loads the sample trip and lists it', async () => {
+  it('loads the sample trip and lands straight on it, there being only the one', async () => {
     render(<App />);
-    expect(await screen.findByText('Europe 2026', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Europe 2026' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
   });
 
-  it('opens the trip and shows what still needs booking', async () => {
-    const user = userEvent.setup();
+  it('shows the whole route, grouped by country', async () => {
     render(<App />);
-    await user.click(await screen.findByText('Europe 2026', {}, { timeout: 5000 }));
-
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Europe 2026' })).toBeInTheDocument(),
+    await waitFor(
+      () => expect(screen.getByRole('heading', { name: 'Europe 2026' })).toBeInTheDocument(),
+      { timeout: 5000 },
     );
-    expect(screen.getByText(/still to book/)).toBeInTheDocument();
-    expect(screen.getByText(/Plan check/)).toBeInTheDocument();
+    expect(screen.getByText('Italy')).toBeInTheDocument();
+    expect(screen.getByText('Rome')).toBeInTheDocument();
   });
 });

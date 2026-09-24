@@ -80,7 +80,11 @@ describe('the days index', () => {
 
   it('keeps the Today button', async () => {
     renderDays();
-    expect(await screen.findByRole('link', { name: /Today/ })).toHaveAttribute(
+    // Scoped to the page header: the app shell's own nav also has a "Today" tab, rendered
+    // twice (desktop rail and mobile bar), which a bare role query would also match.
+    const heading = await screen.findByRole('heading', { name: 'Days' });
+    const header = heading.closest('header') as HTMLElement;
+    expect(within(header).getByRole('link', { name: /Today/ })).toHaveAttribute(
       'href',
       `/t/${TRIP}/today`,
     );
