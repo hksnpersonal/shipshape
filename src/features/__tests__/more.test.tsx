@@ -44,9 +44,10 @@ beforeEach(async () => {
 describe('the More page', () => {
   it('offers the 112 emergency number even with no essentials on the trip', async () => {
     renderAt(`/t/${TRIP}/more`);
-    const call = await screen.findByRole('link', { name: '112' });
+    // Role queries are slow in jsdom on a cold first render; the page itself is not.
+    const call = await screen.findByRole('link', { name: '112' }, { timeout: 5000 });
     expect(call).toHaveAttribute('href', 'tel:112');
-  });
+  }, 15000);
 
   it('shows a tel: link for a phone essential, spaces stripped', async () => {
     await tripsRepo.patch(TRIP, {

@@ -124,6 +124,7 @@ export const BK = {
   roscioli: 'bk-rest-roscioli',
   daFabrizio: 'bk-rest-da-fabrizio',
   osteriaPastella: 'bk-rest-pastella',
+  aubergeAveyronnaise: 'bk-rest-aveyronnaise',
 } as const;
 
 export type BookingKey = keyof typeof BK;

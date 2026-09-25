@@ -699,8 +699,8 @@ const i14: Item[] = buildItems('d14', [
   {
     title: 'Train to Kandersteg',
     type: 'transport',
-    time: '08:50',
-    timeEnd: '09:10',
+    time: '08:55',
+    timeEnd: '09:15',
     travel: {
       mode: 'train',
       from: PLACES.spiez,
@@ -711,7 +711,7 @@ const i14: Item[] = buildItems('d14', [
     },
     tags: ['CONFLICT'],
     notes:
-      'The notes have this leaving Spiez at 08:50, five minutes before the previous leg is due to arrive there.',
+      'The notes have this leaving Spiez at 08:55, the same minute the previous leg is due to arrive there. Check the real connection in the SBB app the evening before.',
   },
   {
     title: 'Walk to the Oeschinen gondola',

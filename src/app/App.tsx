@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RouterProvider } from 'react-router';
 import { ensureSeed, fetchMissingDocuments } from '@/db/seedLoader';
+import { TripUpdateBanner } from '@/pwa/TripUpdateBanner';
 import { UpdatePrompt } from '@/pwa/UpdatePrompt';
 import { requestPersistentStorage } from '@/pwa/storage';
 import { router } from './routes';
@@ -41,6 +42,7 @@ export default function App() {
           The sample trip could not load: {failed}
         </div>
       ) : null}
+      <TripUpdateBanner />
       <RouterProvider router={router} />
       <UpdatePrompt />
     </>

@@ -89,10 +89,11 @@ describe('the conflicts the traveller found by hand', () => {
     expect(bundle.conflicts.map((c) => c.id)).toContain('mc-day-numbering');
   });
 
-  it('#3 the Paris check-in cannot happen before the train arrives', () => {
+  it('#3 the Paris afternoon now follows the real 15:40 arrival', () => {
+    // The 10 September notes moved check-in to 16:30 and dropped the stale 13:40 line.
     const paris = on(DAY_DATES.d16);
-    expect(paris.some((f) => f.ruleId === 'time-overlap')).toBe(true);
-    expect(paris.some((f) => f.ruleId === 'stale-arrival-time')).toBe(true);
+    expect(paris.some((f) => f.ruleId === 'time-overlap')).toBe(false);
+    expect(paris.some((f) => f.ruleId === 'stale-arrival-time')).toBe(false);
   });
 
   it('#4 the Basel connection onto a non-refundable TGV is flagged', () => {
@@ -136,9 +137,10 @@ describe('the conflicts the traveller found by hand', () => {
     expect(on(DAY_DATES.d18).some((f) => f.ruleId === 'missing-transit-leg')).toBe(true);
   });
 
-  it('#12 the Florence Duomo hours close before they open', () => {
+  it('#12 the Florence Duomo hours now read 10:15 to 15:45', () => {
+    // The notes used to say 10:15-3:45; the 10 September version fixed it.
     const suspicious = on(DAY_DATES.d05).find((f) => f.ruleId === 'opening-hours-suspicious');
-    expect(suspicious?.title).toContain('10:15-3:45');
+    expect(suspicious).toBeUndefined();
   });
 
   it('#13 and #14 repeated venues are surfaced, the tiramisu hardest', () => {

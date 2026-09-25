@@ -72,8 +72,8 @@ describe('the days index', () => {
 
   it('marks only the day with an error-severity finding, not every day with a note', async () => {
     renderDays();
-    // The Paris arrival/departure overlap is an error finding on day 16.
-    const heading = await screen.findByText(/Paris · 11–15 Oct · Hotel Flanelles/);
+    // The stale Amsterdam arrival overlaps the Eurostar: an error finding on day 20.
+    const heading = await screen.findByText(/Amsterdam · 15–17 Oct · nhow Amsterdam RAI/);
     const block = blockFor(heading);
     expect(within(block).getAllByTitle('Needs a look').length).toBeGreaterThan(0);
   });

@@ -51,27 +51,27 @@ beforeEach(async () => {
 });
 
 describe('the day timeline', () => {
-  it('shows the Paris day with both the booked train and the stale line still in it', async () => {
-    renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
-    expect(await screen.findByText('TGV Lyria to Paris')).toBeInTheDocument();
-    expect(screen.getByText('Arrive Paris Gare de Lyon')).toBeInTheDocument();
-    expect(screen.getByText('Check in and rest')).toBeInTheDocument();
+  it('shows the Amsterdam day with both the booked train and the stale line still in it', async () => {
+    renderAt(`/t/${TRIP}/days/${TRIP}-d20`);
+    expect(await screen.findByText('Eurostar to Amsterdam Centraal')).toBeInTheDocument();
+    expect(screen.getByText('Arrive Amsterdam Centraal')).toBeInTheDocument();
   });
 
   it('strips the day back to what is tagged when a filter is on', async () => {
     const user = userEvent.setup();
-    renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
-    await screen.findByText('TGV Lyria to Paris');
+    renderAt(`/t/${TRIP}/days/${TRIP}-d20`);
+    await screen.findByText('Eurostar to Amsterdam Centraal');
 
     // The tag filter is edit machinery, hidden until asked for.
     await user.click(screen.getByRole('button', { name: 'Edit day' }));
     await user.click(screen.getByRole('button', { name: /CONFLICT/ }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Train to Interlaken Ost')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Breakfast, check out, buy food for the train'),
+      ).not.toBeInTheDocument();
     });
-    expect(screen.getByText('Arrive Paris Gare de Lyon')).toBeInTheDocument();
-    expect(screen.getByText('Check in and rest')).toBeInTheDocument();
+    expect(screen.getByText('Arrive Amsterdam Centraal')).toBeInTheDocument();
   });
 
   it('remembers that something has been done', async () => {
@@ -136,10 +136,10 @@ describe('the conflict inbox', () => {
     renderAt(`/t/${TRIP}/conflicts`);
     expect(await screen.findByRole('heading', { name: 'Plan check' })).toBeInTheDocument();
     expect(screen.getByText(/Nothing here stops the trip/)).toBeInTheDocument();
-    // Paris day 16 has an error on it, so its group is named for the day and open by
+    // Amsterdam day 20 has an error on it, so its group is named for the day and open by
     // default. The same day's own "to decide" card carries the same day line, so this
     // looks for the one that sits inside a disclosure rather than assuming there is one.
-    const dayLabels = await screen.findAllByText('Sun 11 Oct · Paris');
+    const dayLabels = await screen.findAllByText('Thu 15 Oct · Amsterdam');
     const disclosureLabel = dayLabels.find((el) => el.closest('details'));
     expect(disclosureLabel).toBeDefined();
     expect((disclosureLabel?.closest('details') as HTMLDetailsElement).open).toBe(true);
@@ -147,10 +147,10 @@ describe('the conflict inbox', () => {
     expect(screen.getByRole('button', { name: /Show minor notes/ })).toBeInTheDocument();
   });
 
-  it('shows the stale Paris arrival as a finding with a fix', async () => {
+  it('shows the stale Amsterdam arrival as a finding with a fix', async () => {
     renderAt(`/t/${TRIP}/conflicts`);
     expect(
-      await screen.findByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
+      await screen.findByText(/Eurostar to Amsterdam Centraal overlaps Arrive Amsterdam Centraal/),
     ).toBeInTheDocument();
   });
 
@@ -158,7 +158,7 @@ describe('the conflict inbox', () => {
     const user = userEvent.setup();
     renderAt(`/t/${TRIP}/conflicts`);
     const heading = await screen.findByText(
-      /TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/,
+      /Eurostar to Amsterdam Centraal overlaps Arrive Amsterdam Centraal/,
     );
     const card = heading.closest('div.rounded-2xl') as HTMLElement;
     // Compact by default: expand the finding to reach its actions.
@@ -167,7 +167,7 @@ describe('the conflict inbox', () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
+        screen.queryByText(/Eurostar to Amsterdam Centraal overlaps Arrive Amsterdam Centraal/),
       ).not.toBeInTheDocument();
     });
 
@@ -178,7 +178,7 @@ describe('the conflict inbox', () => {
     // And it comes back under the cleared view.
     await user.click(screen.getByRole('button', { name: /Cleared/ }));
     expect(
-      await screen.findByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
+      await screen.findByText(/Eurostar to Amsterdam Centraal overlaps Arrive Amsterdam Centraal/),
     ).toBeInTheDocument();
   });
 });
@@ -550,10 +550,10 @@ describe('deleting an item', () => {
     expect(await screen.findByText(/Arrival and a romantic Rome evening/)).toBeInTheDocument();
   });
 
-  it('re-runs the audit: removing the stale Paris arrival clears its finding', async () => {
-    const itemId = `${TRIP}-d16-i06`; // "Arrive Paris Gare de Lyon"
+  it('re-runs the audit: removing the stale Amsterdam arrival clears its finding', async () => {
+    const itemId = `${TRIP}-d20-i05`; // "Arrive Amsterdam Centraal"
     const itemScreen = renderAt(`/t/${TRIP}/items/${itemId}`);
-    await screen.findByText('Arrive Paris Gare de Lyon');
+    await screen.findByText('Arrive Amsterdam Centraal');
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Edit' }));
@@ -569,7 +569,7 @@ describe('deleting an item', () => {
     renderAt(`/t/${TRIP}/conflicts`);
     await screen.findByRole('heading', { name: 'Plan check' });
     expect(
-      screen.queryByText(/TGV Lyria to Paris overlaps Arrive Paris Gare de Lyon/),
+      screen.queryByText(/Eurostar to Amsterdam Centraal overlaps Arrive Amsterdam Centraal/),
     ).not.toBeInTheDocument();
   });
 

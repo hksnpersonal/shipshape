@@ -611,9 +611,8 @@ const i05: Item[] = buildItems('d05', [
     type: 'sight',
     groupLabel: 'Florence afternoon route',
     location: PLACES.duomoFirenze,
-    openingHours: hours('10:15-3:45'),
-    tags: ['CHECK'],
-    notes: 'The notes write the hours as 10:15-3:45, which is presumably 10:15 to 15:45.',
+    openingHours: hours('10:15-15:45'),
+    notes: 'Free to see from outside. Open 10:15 to 15:45.',
   },
   {
     title: 'Baptistery of St John',
@@ -814,6 +813,13 @@ const i07: Item[] = buildItems('d07', [
     title: 'Traditional Milanese dinner',
     type: 'meal',
     orderNotes: ['Risotto alla Milanese', 'Cotoletta alla Milanese', 'Ossobuco'],
+  },
+  {
+    title: "Check tomorrow's Lake Como trains and ferries",
+    type: 'reminder',
+    tags: ['MUST'],
+    notes:
+      'October ferries can stop early. Check the Varenna, Bellagio and Menaggio times tonight.',
   },
   {
     title: 'Sleep early, big scenic day tomorrow',

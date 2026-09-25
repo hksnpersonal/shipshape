@@ -416,6 +416,8 @@ export interface ProviderSettings {
    * later launch never replaces the trip and throws away changes made on the phone.
    */
   preloadedTripAt?: Timestamp | null;
+  /** `exportedAt` of the bundled trip file this device last loaded, to spot a newer one. */
+  preloadedTripVersion?: Timestamp | null;
 }
 
 export const DEFAULT_SETTINGS: ProviderSettings = {

@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { europe2026 } from '@/seed/europe-2026';
 import { db } from '../db';
 import { documentsRepo, settingsRepo } from '../repo';
-import { ensureSeed, fetchMissingDocuments } from '../seedLoader';
+import {
+  applyTripUpdate,
+  checkForTripUpdate,
+  ensureSeed,
+  fetchMissingDocuments,
+} from '../seedLoader';
 import { exportTrip, importTrip } from '../transfer';
 
 const TRIP = europe2026.bundle.trip.id;
@@ -129,5 +134,79 @@ describe('fetchMissingDocuments', () => {
 
   it('does nothing in the public build', async () => {
     expect(await fetchMissingDocuments(null)).toBe(0);
+  });
+});
+
+describe('updating a preloaded trip', () => {
+  it('offers nothing in the public build or before the first load', async () => {
+    expect(await checkForTripUpdate(null)).toBeNull();
+    const file = await privateFile();
+    expect(await checkForTripUpdate(URL, serving(file))).toBeNull();
+  });
+
+  it('spots a newer file, and not the same one again', async () => {
+    const file = await privateFile();
+    await ensureSeed({ privateTripUrl: URL, fetchImpl: serving(file) });
+    expect(await checkForTripUpdate(URL, serving(file))).toBeNull();
+    const newer = { ...file, exportedAt: '2026-09-25T09:00:00.000Z' };
+    expect(await checkForTripUpdate(URL, serving(newer))).not.toBeNull();
+  });
+
+  it('keeps ticks, decisions, downloaded files and what was added on the phone', async () => {
+    const file = await privateFile();
+    await ensureSeed({ privateTripUrl: URL, fetchImpl: serving(file) });
+
+    // On the phone: tick an item, mark a booking sorted, decide a finding, add a booking.
+    const item = (await db.items.where('tripId').equals(TRIP).first())!;
+    await db.items.update(item.id, { status: 'done' });
+    await db.bookings.update('bk-mtn-pilatus', { status: 'booked' });
+    await db.findingStates.put({
+      id: `${TRIP}|some-key`,
+      tripId: TRIP,
+      key: 'some-key',
+      ruleId: 'manual',
+      status: 'resolved',
+      updatedAt: new Date().toISOString(),
+    });
+    const later = new Date(Date.now() + 60_000).toISOString();
+    await db.bookings.put({
+      ...(await db.bookings.get('bk-mtn-pilatus'))!,
+      id: 'bk-made-on-phone',
+      title: 'Made on the phone',
+      createdAt: later,
+      updatedAt: later,
+    });
+    const [doc] = await db.documents.toArray();
+
+    await applyTripUpdate({ ...file, exportedAt: '2026-09-25T09:00:00.000Z' });
+
+    expect((await db.items.get(item.id))?.status).toBe('done');
+    expect((await db.bookings.get('bk-mtn-pilatus'))?.status).toBe('booked');
+    expect((await db.findingStates.get(`${TRIP}|some-key`))?.status).toBe('resolved');
+    expect(await db.bookings.get('bk-made-on-phone')).toBeDefined();
+    expect(await db.documentBytes.get(doc!.id)).toBeDefined();
+    expect(
+      await checkForTripUpdate(URL, serving({ ...file, exportedAt: '2026-09-25T09:00:00.000Z' })),
+    ).toBeNull();
+  });
+
+  it('carries a tick by day and title when the day loses an item', async () => {
+    const file = await privateFile();
+    await ensureSeed({ privateTripUrl: URL, fetchImpl: serving(file) });
+    const [first, second] = await db.items.where('dayId').equals(`${TRIP}-d16`).sortBy('sortKey');
+    await db.items.update(second!.id, { status: 'done' });
+
+    // The newer file drops the first item of the day. The tick is found again by day and
+    // title, which is what survives when the seed renumbers the rest.
+    const items = file.bundle.items.filter((i) => i.id !== first!.id);
+    await applyTripUpdate({
+      ...file,
+      exportedAt: '2026-09-25T09:00:00.000Z',
+      bundle: { ...file.bundle, items },
+    });
+
+    const now = await db.items.where('dayId').equals(`${TRIP}-d16`).toArray();
+    expect(now.find((i) => i.title === second!.title)?.status).toBe('done');
+    expect(now.filter((i) => i.status === 'done')).toHaveLength(1);
   });
 });

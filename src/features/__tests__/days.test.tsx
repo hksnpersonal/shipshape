@@ -129,12 +129,12 @@ describe('the Next up card', () => {
 
   it('picks the next timed item after the mocked clock, not the first of the day', async () => {
     await settingsRepo.patch({ simulatedToday: '2026-10-11' });
-    // 15:00 in Europe/Rome (the trip's default zone, still CEST on 11 Oct) - after
-    // breakfast at 07:00 and check-in at 14:30, before Notre-Dame at 16:30.
-    vi.setSystemTime(new Date('2026-10-11T13:00:00.000Z'));
+    // 17:00 in Europe/Rome (the trip's default zone, still CEST on 11 Oct) - after
+    // breakfast at 07:00 and check-in at 16:30, before Notre-Dame at 17:30.
+    vi.setSystemTime(new Date('2026-10-11T15:00:00.000Z'));
     renderAt(`/t/${TRIP}/days/${TRIP}-d16`);
 
-    const chip = await screen.findByText(/Next · 16:30/);
+    const chip = await screen.findByText(/Next · 17:30/);
     const card = chip.parentElement?.parentElement as HTMLElement;
     expect(within(card).getByText('Notre-Dame Cathedral')).toBeInTheDocument();
   });

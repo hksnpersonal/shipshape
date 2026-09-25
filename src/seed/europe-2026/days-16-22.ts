@@ -82,20 +82,6 @@ const i16: Item[] = buildItems('d16', [
     },
   },
   {
-    title: 'Arrive Paris Gare de Lyon',
-    type: 'transport',
-    time: '13:40',
-    tags: ['CONFLICT'],
-    location: PLACES.parisGareDeLyon,
-    travel: {
-      mode: 'train',
-      from: PLACES.baselSbb,
-      to: PLACES.parisGareDeLyon,
-    },
-    notes:
-      'A stale line from an earlier draft. The booked arrival is 15:40. Kept so the two can be reconciled deliberately.',
-  },
-  {
     title: 'Metro to the hotel',
     type: 'transfer',
     durationMins: 24,
@@ -111,17 +97,15 @@ const i16: Item[] = buildItems('d16', [
   {
     title: 'Check in and rest',
     type: 'admin',
-    time: '14:30',
+    time: '16:30',
     durationMins: 30,
-    tags: ['CONFLICT'],
     location: PLACES.hotelFlanelles,
-    notes:
-      'Impossible against a 15:40 arrival plus 24 minutes of metro. Realistically about 16:15, which collides with the 16:30 Notre-Dame slot.',
+    notes: 'Freshen up and rest for half an hour.',
   },
   {
     title: 'Notre-Dame Cathedral',
     type: 'sight',
-    time: '16:30',
+    time: '17:30',
     location: PLACES.notreDame,
     notes: 'Exterior, 16 minutes away.',
   },
@@ -319,6 +303,8 @@ const i18: Item[] = buildItems('d18', [
   {
     title: "Dinner at L'Auberge Aveyronnaise",
     type: 'meal',
+    time: '19:00',
+    bookingId: BK.aubergeAveyronnaise,
     location: PLACES.aubergeAveyronnaise,
     orderNotes: ['Aligot', 'Sausage or duck confit'],
   },
@@ -407,6 +393,7 @@ const i19: Item[] = buildItems('d19', [
     type: 'shop',
     groupLabel: 'Brussels route',
     location: PLACES.galeriesRoyales,
+    notes: 'Leave time to walk back to Bruxelles-Midi for the 13:13 train, about 20 minutes.',
   },
   {
     title: 'Train back to Paris',
@@ -414,7 +401,6 @@ const i19: Item[] = buildItems('d19', [
     time: '13:13',
     timeEnd: '14:35',
     bookingId: BK.eurostarBruPar,
-    tags: ['CONFLICT'],
     travel: {
       mode: 'train',
       from: PLACES.brusselsMidi,
@@ -422,8 +408,7 @@ const i19: Item[] = buildItems('d19', [
       durationMins: 82,
       operator: 'Eurostar',
     },
-    notes:
-      'The ticket is for the 13:13, arriving 14:35. The notes planned a 17:15 return, so the afternoon route above no longer fits. Either trim Brussels to the morning or change the ticket - Eurostar allows changes for the fare difference.',
+    notes: 'Booked. Be at Bruxelles-Midi by 12:53. Arrives Paris Gare du Nord 14:35.',
   },
   { title: 'Dinner, then back to the hotel', type: 'meal' },
   { title: "Buy food for tomorrow's train ride", type: 'shop', tags: ['MUST'] },
@@ -454,7 +439,7 @@ const i20: Item[] = buildItems('d20', [
   {
     title: 'Walk to Paris Gare du Nord',
     type: 'transfer',
-    time: '09:00',
+    time: '08:30',
     durationMins: 3,
     travel: {
       mode: 'walk',
