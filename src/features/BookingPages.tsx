@@ -574,11 +574,10 @@ export function BookingsBoardPage() {
 
   const stillToBook = categoryFiltered.filter((e) => e.booking.status === 'to_book');
 
-  // Once booked, a thing belongs in Next up, Later or Past by date. Still-to-book only
-  // shows there when the strip's own filter is the one asking to see it - otherwise it
-  // stays folded into the strip above, not duplicated below it.
-  const sectioned =
-    statusParam === 'to_book' ? filtered : filtered.filter((e) => e.booking.status !== 'to_book');
+  // Everything sits in date order, still-to-book included: the strip above is a summary,
+  // not a hiding place. A booking someone has just added must be visible, or adding it
+  // looks like it failed. Next up stays for held bookings only (see `isHeld`).
+  const sectioned = filtered;
   const upcoming = sectioned
     .filter((e) => e.booking.date >= today)
     .sort(

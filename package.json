@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test",
     "trip:private": "node scripts/make-private-trip.mjs \"../../Europe Trips/shipshape-private.json\" \"../../Europe Trips/Europe 2026.shipshape.json\"",
-    "build:private": "npm run trip:private && node scripts/build-private.mjs \"../../Europe Trips/Europe 2026.shipshape.json\" \"../../Europe Trips/Shipshape private site\""
+    "build:private": "npm run trip:private && node scripts/build-private.mjs \"../../Europe Trips/Europe 2026.shipshape.json\" \"../../Europe Trips/Shipshape private site\"",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@date-fns/tz": "1.5.0",
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",

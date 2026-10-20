@@ -6,3 +6,5 @@ coverage
 *.local
 .DS_Store
 shot-*.png
+test-results
+playwright-report

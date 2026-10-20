@@ -5,6 +5,7 @@
  * number on a concourse should not have the screen replaced underneath them, so a new
  * version waits behind a button until they tap it.
  */
+import { useEffect } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { Button } from '@/components/ui';
 
@@ -19,6 +20,14 @@ export function UpdatePrompt() {
       if (registration) setInterval(() => void registration.update(), 60 * 60 * 1000);
     },
   });
+
+  // "Ready offline" is news, not a question: it clears itself rather than sitting over
+  // the bottom of the screen until someone finds the button. A new version still waits.
+  useEffect(() => {
+    if (!offlineReady || needRefresh) return;
+    const timer = window.setTimeout(() => setOfflineReady(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [offlineReady, needRefresh, setOfflineReady]);
 
   if (!offlineReady && !needRefresh) return null;
 
