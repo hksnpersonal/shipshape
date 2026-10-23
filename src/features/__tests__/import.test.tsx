@@ -11,7 +11,7 @@ import { AppShell } from '@/app/AppShell';
 import { db } from '@/db/db';
 import { exportTrip, importTrip } from '@/db/transfer';
 import { europe2026 } from '@/seed/europe-2026';
-import { documentsRepo, tripsRepo } from '@/db/repo';
+import { documentsRepo, settingsRepo, tripsRepo } from '@/db/repo';
 import { SettingsPage } from '@/features/InboxPages';
 import { TripHomePage } from '@/features/TripPages';
 
@@ -140,5 +140,17 @@ describe('loading a trip file with no matching trip on this phone', () => {
     });
     expect(screen.queryByText(/This replaces/)).not.toBeInTheDocument();
     expect(await db.trips.get(freshFile.bundle.trip.id)).toBeDefined();
+  });
+});
+
+describe('the usage-sharing switch in Settings', () => {
+  it('is on by default, and unchecking it saves shareUsage: false', async () => {
+    renderAt('/settings');
+    const user = userEvent.setup();
+    const box = await screen.findByRole('checkbox', { name: 'Share anonymous usage' });
+    expect(box).toBeChecked();
+    await user.click(box);
+    await waitFor(async () => expect((await settingsRepo.get()).shareUsage).toBe(false));
+    expect(box).not.toBeChecked();
   });
 });

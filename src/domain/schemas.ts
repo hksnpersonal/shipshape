@@ -368,6 +368,7 @@ export const ProviderSettingsSchema = z.object({
   lastExportAt: z.string().nullable().optional(),
   preloadedTripAt: z.string().nullable().optional(),
   preloadedTripVersion: z.string().nullable().optional(),
+  shareUsage: z.boolean().optional(),
 });
 
 export const TripBundleSchema = z.object({

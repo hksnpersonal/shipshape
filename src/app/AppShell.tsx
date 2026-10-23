@@ -3,8 +3,10 @@
  * Today (what now), Trip (where am I in it), Wallet (where is my ticket), More (everything
  * else). A bottom bar on a phone, a side rail on a laptop.
  */
+import { useEffect } from 'react';
 import { Link, Outlet, useLocation, useParams } from 'react-router';
 import { Map, MoreHorizontal, Settings, Sun, Ticket, Wallet } from 'lucide-react';
+import { trackView } from '@/analytics/track';
 import { cn } from '@/lib/cn';
 
 interface NavItem {
@@ -59,6 +61,8 @@ export function AppShell() {
   const { tripId } = useParams();
   const { pathname } = useLocation();
   const items = navItems(tripId);
+
+  useEffect(() => trackView(pathname), [pathname]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 md:flex dark:bg-slate-900 dark:text-slate-100">

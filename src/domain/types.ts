@@ -418,6 +418,8 @@ export interface ProviderSettings {
   preloadedTripAt?: Timestamp | null;
   /** `exportedAt` of the bundled trip file this device last loaded, to spot a newer one. */
   preloadedTripVersion?: Timestamp | null;
+  /** Anonymous usage counts (public build only); undefined counts as on. */
+  shareUsage?: boolean;
 }
 
 export const DEFAULT_SETTINGS: ProviderSettings = {

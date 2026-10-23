@@ -30,6 +30,8 @@ jobs:
         env:
           # Pages serves from a subdirectory named after the repository.
           VITE_BASE: /${{ github.event.repository.name }}/
+          # A repo variable, not a secret: the id is public in the bundle anyway.
+          VITE_UMAMI_WEBSITE_ID: ${{ vars.UMAMI_WEBSITE_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -5,6 +5,7 @@
 import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { ChevronLeft, FileText, Trash2, Upload } from 'lucide-react';
+import { trackEvent } from '@/analytics/track';
 import {
   Button,
   Card,
@@ -54,6 +55,7 @@ async function openDocument(id: ID): Promise<void> {
   // Open the tab now, while the tap still counts as the user's: iPhone Safari blocks a
   // window opened after an await. The file is loaded into it once it has been read.
   const tab = window.open('', '_blank');
+  trackEvent('document_opened');
   const blob = await documentsRepo.blob(id);
   if (!blob) {
     tab?.close();

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { TRIP, openApp, pretendToday } from './helpers';
+import { TRIP, openApp, pretendToday, tabBar } from './helpers';
 
 test('before the trip it counts down, and Today opens the departure day', async ({ page }) => {
   await pretendToday(page, '2026-09-20');
@@ -63,4 +63,21 @@ test('a search that matches nothing hides the rows, and treats markup as text', 
   await page.getByLabel('Search documents').fill('<img src=x onerror=alert(1)>');
   await expect(page.getByText('boat.pdf')).toHaveCount(0);
   expect(dialogs).toBe(0);
+});
+
+test('walking the four tabs sends no analytics from localhost', async ({ page }) => {
+  let sends = 0;
+  await page.route('**/api/send', (route) => {
+    sends += 1;
+    void route.abort();
+  });
+  await openApp(page);
+  for (const tab of ['Today', 'Trip', 'Wallet', 'More']) {
+    await tabBar(page).getByRole('link', { name: tab }).click();
+    await expect(tabBar(page).getByRole('link', { name: tab })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  }
+  expect(sends).toBe(0);
 });

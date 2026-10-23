@@ -17,6 +17,7 @@ import {
   Ticket,
   type LucideIcon,
 } from 'lucide-react';
+import { trackEvent } from '@/analytics/track';
 import { Button, OutLink, PageHeader, Section } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { CATEGORY_META } from '@/domain/categories';
@@ -110,6 +111,7 @@ function EssentialTrailing({ essential }: { essential: Essential }) {
 
   const copy = async () => {
     await navigator.clipboard.writeText(essential.value);
+    trackEvent('emergency_copied');
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };

@@ -34,6 +34,7 @@ if (trip.format !== 'shipshape' || !trip.bundle?.trip?.id) {
 }
 
 process.env.VITE_PRIVATE_TRIP = '1';
+process.env.VITE_UMAMI_WEBSITE_ID = '';
 process.env.VITE_BASE = '/';
 await build({ root: repo, logLevel: 'warn', build: { outDir, emptyOutDir: true } });
 

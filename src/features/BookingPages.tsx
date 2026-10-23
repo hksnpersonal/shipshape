@@ -26,6 +26,7 @@ import {
   Plus,
   X,
 } from 'lucide-react';
+import { trackEvent } from '@/analytics/track';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -952,6 +953,7 @@ function ReferenceFact({ reference, label = 'Reference' }: { reference: string; 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(reference);
+      trackEvent('reference_copied');
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -971,7 +973,12 @@ function ReferenceFact({ reference, label = 'Reference' }: { reference: string; 
       <div className="flex shrink-0 gap-2">
         {/* Button doesn't forward arbitrary props, so the accessible name has to be a
             visually-hidden child rather than an `aria-label` on the element itself. */}
-        <Button onClick={() => setRevealed((r) => !r)}>
+        <Button
+          onClick={() => {
+            if (!revealed) trackEvent('reference_revealed');
+            setRevealed((r) => !r);
+          }}
+        >
           {revealed ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
           <span className="sr-only">{revealed ? 'Hide reference' : 'Show reference'}</span>
         </Button>

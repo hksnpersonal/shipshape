@@ -30,6 +30,7 @@ import {
   TrainFront,
 } from 'lucide-react';
 import { TZDate } from '@date-fns/tz';
+import { trackEvent } from '@/analytics/track';
 import { allGuides } from '@/content/guides';
 import {
   Button,
@@ -316,7 +317,10 @@ function ItemRow({
           <button
             type="button"
             aria-label={done ? 'Mark as still to do' : 'Mark as done'}
-            onClick={() => onToggle(done ? 'planned' : 'done')}
+            onClick={() => {
+              if (!done) trackEvent('item_ticked');
+              onToggle(done ? 'planned' : 'done');
+            }}
             className={cn(
               control,
               done && 'border-emerald-500 bg-emerald-500 text-white dark:border-emerald-500',

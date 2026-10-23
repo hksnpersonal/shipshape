@@ -5,10 +5,12 @@
  * thing to do there is tell people where the button is.
  */
 import { useEffect, useState } from 'react';
+import { trackEvent } from '@/analytics/track';
 import { Button, Card } from '@/components/ui';
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
 export function InstallHint() {
@@ -41,7 +43,15 @@ export function InstallHint() {
       </p>
       <div className="mt-2 flex gap-2">
         {deferred ? (
-          <Button variant="primary" onClick={() => void deferred.prompt()}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              void deferred.prompt();
+              void deferred.userChoice
+                .then((choice) => trackEvent('install_prompt', { outcome: choice.outcome }))
+                .catch(() => undefined);
+            }}
+          >
             Install
           </Button>
         ) : null}

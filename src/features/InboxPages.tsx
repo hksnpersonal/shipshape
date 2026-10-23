@@ -28,6 +28,7 @@ import {
   SeverityChip,
   StatTile,
 } from '@/components/ui';
+import { setShareUsage, trackEvent } from '@/analytics/track';
 import { cn } from '@/lib/cn';
 import { europe2026 } from '@/seed/europe-2026';
 import { findingsRepo, listTrips, remindersRepo, settingsRepo } from '@/db/repo';
@@ -490,6 +491,7 @@ export function SettingsPage() {
     anchor.download = exportFileName(file.bundle);
     anchor.click();
     URL.revokeObjectURL(url);
+    trackEvent('trip_exported', { kind: includeDocuments ? 'full' : 'itinerary' });
     await settingsRepo.patch({ lastExportAt: new Date().toISOString() });
     setMessage(`Saved ${anchor.download}.`);
   };
@@ -498,6 +500,7 @@ export function SettingsPage() {
     setPendingImport(null);
     try {
       const result = await importTrip(file, { mode });
+      trackEvent('trip_imported', { mode: mode === 'copy' ? 'keep_both' : 'replace' });
       navigate(`/t/${result.tripId}`);
       window.alert(
         `Imported ${result.counts.bookings} bookings and ${result.counts.documents} documents.`,
@@ -542,6 +545,7 @@ export function SettingsPage() {
   const resetToSample = async () => {
     setProblems([]);
     await importTrip(europe2026, { mode: 'replace' });
+    trackEvent('trip_reset_to_sample');
     setMessage('The sample trip has been restored.');
   };
 
@@ -647,6 +651,21 @@ export function SettingsPage() {
           <p className="mt-2 text-xs text-slate-400">
             If you add keys in a later version they stay on this device and are never included in an
             export.
+          </p>
+          <label className="mt-3 flex min-h-[44px] items-center gap-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={settings.shareUsage !== false}
+              onChange={(event) => {
+                void settingsRepo.patch({ shareUsage: event.target.checked });
+                setShareUsage(event.target.checked);
+              }}
+              className="h-5 w-5"
+            />
+            Share anonymous usage
+          </label>
+          <p className="text-xs text-slate-400">
+            Counts which screens and buttons are used. Never your trip, bookings or documents.
           </p>
         </Card>
       </Section>

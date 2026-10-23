@@ -7,6 +7,7 @@
  */
 import { useEffect } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { trackEvent } from '@/analytics/track';
 import { Button } from '@/components/ui';
 
 export function UpdatePrompt() {
@@ -20,6 +21,10 @@ export function UpdatePrompt() {
       if (registration) setInterval(() => void registration.update(), 60 * 60 * 1000);
     },
   });
+
+  useEffect(() => {
+    if (offlineReady) trackEvent('offline_ready');
+  }, [offlineReady]);
 
   // "Ready offline" is news, not a question: it clears itself rather than sitting over
   // the bottom of the screen until someone finds the button. A new version still waits.
