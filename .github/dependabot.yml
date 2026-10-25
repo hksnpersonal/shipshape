@@ -1,0 +1,20 @@
+# Dependabot: weekly dependency + GitHub Actions updates, grouped to keep PR noise low.
+# Security fixes still arrive as soon as an advisory is published (needs Dependabot alerts on in repo Settings).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Australia/Sydney
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Australia/Sydney
